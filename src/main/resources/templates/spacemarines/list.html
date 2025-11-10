@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title>Space Marines List</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-people-fill"></i> Space Marines</h1>
+        <a th:href="@{/spacemarines/create}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Create New
+        </a>
+    </div>
+
+    <!-- Фильтрация и поиск -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form th:action="@{/spacemarines}" method="get" class="row g-3" id="searchForm">
+                <div class="col-md-4">
+                    <input type="text" class="form-control" name="filter" th:value="${filter}"
+                           placeholder="Search by name..." id="searchInput">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" name="sortField" id="sortField">
+                        <option value="id" th:selected="${sortField == 'id'}">ID</option>
+                        <option value="name" th:selected="${sortField == 'name'}">Name</option>
+                        <option value="creationDate" th:selected="${sortField == 'creationDate'}">Creation Date</option>
+                        <option value="health" th:selected="${sortField == 'health'}">Health</option>
+                        <option value="heartCount" th:selected="${sortField == 'heartCount'}">Heart Count</option>
+                        <option value="height" th:selected="${sortField == 'height'}">Height</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" name="sortDirection" id="sortDirection">
+                        <option value="asc" th:selected="${sortDirection == 'asc'}">Ascending</option>
+                        <option value="desc" th:selected="${sortDirection == 'desc'}">Descending</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Таблица Space Marines -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                    <tr>
+                        <th>
+                            ID
+                            <span th:if="${sortField == 'id' and sortDirection == 'asc'}" class="ms-1"><i
+                                    class="bi bi-arrow-up"></i></span>
+                            <span th:if="${sortField == 'id' and sortDirection == 'desc'}" class="ms-1"><i
+                                    class="bi bi-arrow-down"></i></span>
+                        </th>
+                        <th>
+                            Name
+                            <span th:if="${sortField == 'name' and sortDirection == 'asc'}" class="ms-1"><i
+                                    class="bi bi-arrow-up"></i></span>
+                            <span th:if="${sortField == 'name' and sortDirection == 'desc'}" class="ms-1"><i
+                                    class="bi bi-arrow-down"></i></span>
+                        </th>
+                        <th>Coordinates</th>
+                        <th>
+                            Health
+                            <span th:if="${sortField == 'health' and sortDirection == 'asc'}" class="ms-1"><i
+                                    class="bi bi-arrow-up"></i></span>
+                            <span th:if="${sortField == 'health' and sortDirection == 'desc'}" class="ms-1"><i
+                                    class="bi bi-arrow-down"></i></span>
+                        </th>
+                        <th>
+                            Hearts
+                            <span th:if="${sortField == 'heartCount' and sortDirection == 'asc'}" class="ms-1"><i
+                                    class="bi bi-arrow-up"></i></span>
+                            <span th:if="${sortField == 'heartCount' and sortDirection == 'desc'}" class="ms-1"><i
+                                    class="bi bi-arrow-down"></i></span>
+                        </th>
+                        <th>
+                            Height
+                            <span th:if="${sortField == 'height' and sortDirection == 'asc'}" class="ms-1"><i
+                                    class="bi bi-arrow-up"></i></span>
+                            <span th:if="${sortField == 'height' and sortDirection == 'desc'}" class="ms-1"><i
+                                    class="bi bi-arrow-down"></i></span>
+                        </th>
+                        <th>Weapon</th>
+                        <th>Chapter</th>
+                        <th>
+                            Creation Date
+                            <span th:if="${sortField == 'creationDate' and sortDirection == 'asc'}" class="ms-1"><i
+                                    class="bi bi-arrow-up"></i></span>
+                            <span th:if="${sortField == 'creationDate' and sortDirection == 'desc'}" class="ms-1"><i
+                                    class="bi bi-arrow-down"></i></span>
+                        </th>
+                        <th>Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="marine : ${spaceMarines}">
+                        <td th:text="${marine.id}"></td>
+                        <td th:text="${marine.name}"></td>
+                        <td>
+                            (<span th:text="${marine.coordinates.x}"></span>,
+                            <span th:text="${marine.coordinates.y}"></span>)
+                        </td>
+                        <td th:text="${marine.health}"></td>
+                        <td>
+                            <span th:if="${marine.heartCount != null}">
+                                <span th:each="i : ${#numbers.sequence(1, marine.heartCount)}">
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                </span>
+                                (<span th:text="${marine.heartCount}"></span>)
+                            </span>
+                            <span th:if="${marine.heartCount == null}" class="text-muted">N/A</span>
+                        </td>
+                        <td th:text="${marine.height} ?: 'N/A'"></td>
+                        <td>
+                            <span class="badge bg-secondary" th:text="${marine.meleeWeapon}"></span>
+                        </td>
+                        <td th:text="${marine.chapter.name}"></td>
+                        <td th:text="${marine.creationDate}"></td>
+                        <td class="table-actions">
+                            <a th:href="@{/spacemarines/{id}(id=${marine.id})}"
+                               class="btn btn-sm btn-outline-info" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a th:href="@{/spacemarines/{id}/edit(id=${marine.id})}"
+                               class="btn btn-sm btn-outline-warning" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form th:action="@{/spacemarines/{id}/delete(id=${marine.id})}"
+                                  method="post" style="display: inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                        title="Delete" onclick="return confirm('Delete this Space Marine?')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr th:if="${#lists.isEmpty(spaceMarines)}">
+                        <td colspan="10" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                            No Space Marines found
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Пагинация -->
+            <nav th:if="${totalPages > 1}" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item" th:classappend="${currentPage == 0} ? 'disabled'">
+                        <a class="page-link"
+                           th:href="@{/spacemarines(page=${currentPage - 1}, size=10, sortField=${sortField}, sortDirection=${sortDirection}, filter=${filter})}">
+                            Previous
+                        </a>
+                    </li>
+                    <li th:each="i : ${#numbers.sequence(0, totalPages - 1)}"
+                        class="page-item" th:classappend="${i == currentPage} ? 'active'">
+                        <a class="page-link"
+                           th:href="@{/spacemarines(page=${i}, size=10, sortField=${sortField}, sortDirection=${sortDirection}, filter=${filter})}"
+                           th:text="${i + 1}"></a>
+                    </li>
+                    <li class="page-item" th:classappend="${currentPage >= totalPages - 1} ? 'disabled'">
+                        <a class="page-link"
+                           th:href="@{/spacemarines(page=${currentPage + 1}, size=10, sortField=${sortField}, sortDirection=${sortDirection}, filter=${filter})}">
+                            Next
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<div layout:fragment="scripts">
+    <script>
+        $(document).ready(function () {
+            let searchTimeout;
+
+            // Дебаунс для поиска - отправка формы через 800ms после окончания ввода
+            $('#searchInput').on('input', function () {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    $('#searchForm').submit();
+                }, 800);
+            });
+
+            // Авто-отправка при изменении сортировки
+            $('#sortField, #sortDirection').on('change', function () {
+                $('#searchForm').submit();
+            });
+
+            // Сохраняем фокус в поле поиска после отправки формы
+            $('#searchForm').on('submit', function () {
+                const searchInput = $('#searchInput');
+                const currentValue = searchInput.val();
+                setTimeout(() => {
+                    searchInput.focus().val('').val(currentValue);
+                }, 100);
+            });
+        });
+    </script>
+</div>
+</body>
+</html>

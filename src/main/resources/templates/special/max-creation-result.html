@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title>Latest Space Marine</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-clock-history"></i> Latest Space Marine</h1>
+        <a th:href="@{/special}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Special Operations
+        </a>
+    </div>
+
+    <div th:if="${marine != null}" class="card">
+        <div class="card-header bg-success text-white">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-star-fill"></i> Most Recently Created Space Marine
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Basic Information</h6>
+                    <dl class="row">
+                        <dt class="col-sm-4">ID:</dt>
+                        <dd class="col-sm-8" th:text="${marine.id}"></dd>
+
+                        <dt class="col-sm-4">Name:</dt>
+                        <dd class="col-sm-8" th:text="${marine.name}"></dd>
+
+                        <dt class="col-sm-4">Health:</dt>
+                        <dd class="col-sm-8" th:text="${marine.health}"></dd>
+
+                        <dt class="col-sm-4">Heart Count:</dt>
+                        <dd class="col-sm-8">
+                                <span th:if="${marine.heartCount == 1}">
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                </span>
+                            <span th:if="${marine.heartCount == 2}">
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                </span>
+                            <span th:if="${marine.heartCount == 3}">
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                    <i class="bi bi-heart-fill text-danger"></i>
+                                </span>
+                            (<span th:text="${marine.heartCount}"></span>)
+                        </dd>
+
+                        <dt class="col-sm-4">Height:</dt>
+                        <dd class="col-sm-8" th:text="${marine.height} ?: 'Not specified'"></dd>
+
+                        <dt class="col-sm-4">Weapon:</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge bg-primary" th:text="${marine.meleeWeapon}"></span>
+                        </dd>
+                    </dl>
+                </div>
+                <div class="col-md-6">
+                    <h6>Location & Chapter</h6>
+                    <dl class="row">
+                        <dt class="col-sm-4">Coordinates:</dt>
+                        <dd class="col-sm-8">
+                            X: <span th:text="${marine.coordinates.x}"></span>,
+                            Y: <span th:text="${marine.coordinates.y}"></span>
+                        </dd>
+
+                        <dt class="col-sm-4">Chapter:</dt>
+                        <dd class="col-sm-8" th:text="${marine.chapter.name}"></dd>
+
+                        <dt class="col-sm-4">Parent Legion:</dt>
+                        <dd class="col-sm-8" th:text="${marine.chapter.parentLegion} ?: 'Not specified'"></dd>
+
+                        <dt class="col-sm-4">Creation Date:</dt>
+                        <dd class="col-sm-8" th:text="${marine.creationDate}"></dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <a th:href="@{/spacemarines/{id}(id=${marine.id})}" class="btn btn-info">
+                <i class="bi bi-eye"></i> View Details
+            </a>
+            <a th:href="@{/spacemarines}" class="btn btn-outline-primary">
+                <i class="bi bi-list"></i> View All Marines
+            </a>
+        </div>
+    </div>
+
+    <div th:if="${marine == null}" class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> No Space Marines found in the system.
+    </div>
+
+    <div class="mt-4">
+        <a th:href="@{/special}" class="btn btn-primary">
+            <i class="bi bi-arrow-repeat"></i> Back to Operations
+        </a>
+    </div>
+</div>
+</body>
+</html>

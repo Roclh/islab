@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title>Special Operations</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-magic"></i> Special Operations</h1>
+        <a th:href="@{/spacemarines}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Marines
+        </a>
+    </div>
+
+    <!-- Flash сообщения -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show">
+        <span th:text="${success}">Operation completed successfully!</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show">
+        <span th:text="${error}">Error occurred!</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div class="row">
+        <!-- Операция 1: Максимальная дата создания -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history"></i> Latest Creation
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Find the Space Marine with the latest creation date.</p>
+                </div>
+                <div class="card-footer">
+                    <a th:href="@{/special/max-creation}" class="btn btn-outline-primary w-100">
+                        Find Latest Marine
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операция 2: Статистика по главам -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-bar-chart"></i> Chapter Statistics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Group Space Marines by chapter and count members.</p>
+                </div>
+                <div class="card-footer">
+                    <a th:href="@{/special/chapter-stats}" class="btn btn-outline-primary w-100">
+                        View Chapter Stats
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операция 3: Подсчет по здоровью -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-heart-pulse"></i> Health Count
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Count Space Marines with health greater than specified value.</p>
+                    <form th:action="@{/special/health-count}" method="post" class="row g-2">
+                        <div class="col-8">
+                            <input type="number" step="any" class="form-control" name="health"
+                                   placeholder="Health value" min="0.1" required>
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-primary w-100">Count</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операция 4: Создание главы -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-plus-circle"></i> Create Chapter
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Create a new Space Marine chapter.</p>
+                    <form th:action="@{/special/create-chapter}" method="post">
+                        <div class="mb-2">
+                            <input type="text" class="form-control" name="name"
+                                   placeholder="Chapter name" required>
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" class="form-control" name="parentLegion"
+                                   placeholder="Parent Legion (optional)">
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Create Chapter</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Операция 5: Удаление главы -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-trash"></i> Delete Chapter
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Delete an existing chapter (all marines will be deleted).</p>
+                    <form th:action="@{/special/delete-chapter}" method="post">
+                        <select class="form-select mb-2" name="chapterId" required>
+                            <option value="">Select chapter to delete</option>
+                            <option th:each="chapter : ${chapters}"
+                                    th:value="${chapter.id}"
+                                    th:text="${chapter.name}"></option>
+                        </select>
+                        <button type="submit" class="btn btn-danger w-100"
+                                onclick="return confirm('This will delete ALL marines in this chapter! Continue?')">
+                            Delete Chapter
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

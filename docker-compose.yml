@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: spacemarine-db
+    environment:
+      POSTGRES_DB: studs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - spacemarine-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d studs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spacemarine-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/studs
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: password
+      JAVA_OPTS: "-Xmx512m -Xms256m"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spacemarine-network
+
+volumes:
+  postgres_data:
+
+networks:
+  spacemarine-network:
+    driver: bridge

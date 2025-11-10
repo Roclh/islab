@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title>Chapter Statistics</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-bar-chart"></i> Chapter Statistics</h1>
+        <a th:href="@{/special}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Special Operations
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Space Marines Count by Chapter</h5>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <select class="form-select" id="statsSort" onchange="sortStatsTable()">
+                        <option value="name-asc">Sort by Name (A-Z)</option>
+                        <option value="name-desc">Sort by Name (Z-A)</option>
+                        <option value="count-asc">Sort by Count (Low-High)</option>
+                        <option value="count-desc">Sort by Count (High-Low)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div th:if="${#lists.isEmpty(stats)}" class="alert alert-info">
+                No statistics available. No Space Marines found in the system.
+            </div>
+
+            <div th:unless="${#lists.isEmpty(stats)}" class="table-responsive">
+                <table class="table table-striped" id="statsTable">
+                    <thead class="table-dark">
+                    <tr>
+                        <th data-sort="name">
+                            Chapter Name
+                            <span class="sort-indicator ms-1"></span>
+                        </th>
+                        <th data-sort="count">
+                            Marines Count
+                            <span class="sort-indicator ms-1"></span>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="entry : ${stats}">
+                        <td th:text="${entry.key} ?: 'Unknown Chapter'"></td>
+                        <td>
+                            <span class="badge bg-primary" th:text="${entry.value}"></span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <a th:href="@{/special}" class="btn btn-primary">
+            <i class="bi bi-arrow-repeat"></i> Back to Operations
+        </a>
+    </div>
+</div>
+
+<div layout:fragment="scripts">
+    <script>
+        function sortStatsTable() {
+            const sortValue = document.getElementById('statsSort').value;
+            const [field, direction] = sortValue.split('-');
+            const table = document.getElementById('statsTable');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            // Update sort indicators
+            table.querySelectorAll('.sort-indicator').forEach(indicator => {
+                indicator.innerHTML = '';
+            });
+
+            const header = table.querySelector(`th[data-sort="${field}"] .sort-indicator`);
+            if (header) {
+                header.innerHTML = direction === 'asc' ? '↑' : '↓';
+            }
+
+            rows.sort((a, b) => {
+                let aValue, bValue;
+
+                if (field === 'name') {
+                    aValue = a.cells[0].textContent.trim();
+                    bValue = b.cells[0].textContent.trim();
+                } else {
+                    aValue = parseInt(a.cells[1].querySelector('.badge').textContent);
+                    bValue = parseInt(b.cells[1].querySelector('.badge').textContent);
+                }
+
+                if (field === 'name') {
+                    return direction === 'asc' ?
+                        aValue.localeCompare(bValue) :
+                        bValue.localeCompare(aValue);
+                } else {
+                    return direction === 'asc' ?
+                        aValue - bValue :
+                        bValue - aValue;
+                }
+            });
+
+            // Remove existing rows
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+
+            // Append sorted rows
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // Initialize sort on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            sortStatsTable();
+        });
+    </script>
+</div>
+</body>
+</html>
