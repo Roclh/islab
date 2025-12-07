@@ -135,13 +135,12 @@
                                class="btn btn-sm btn-outline-warning" title="Edit">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <form th:action="@{/spacemarines/{id}/delete(id=${marine.id})}"
-                                  method="post" style="display: inline;">
-                                <button type="submit" class="btn btn-sm btn-outline-danger"
-                                        title="Delete" onclick="return confirm('Delete this Space Marine?')">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
+                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                    th:attr="data-marine-id=${marine.id}"
+                                    title="Delete"
+                                    onclick="deleteMarine(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </td>
                     </tr>
                     <tr th:if="${#lists.isEmpty(spaceMarines)}">
@@ -208,6 +207,28 @@
                 }, 100);
             });
         });
+
+        function deleteMarine(buttonElement) {
+            const marineId = $(buttonElement).data('marine-id');
+            const deleteUrl = '/spacemarines/' + marineId + '/delete';
+
+            if (confirm('Вы уверены, что хотите удалить этого десантника?')) {
+                $(buttonElement).prop('disabled', true);
+
+                $.ajax({
+                    url: deleteUrl,
+                    type: 'POST',
+                    success: function (response) {
+                        console.log("Удаление выполнено, ждем WebSocket-обновления.");
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Ошибка при удалении:", error);
+                        alert("Не удалось удалить десантника: " + error);
+                        $(buttonElement).prop('disabled', false);
+                    }
+                });
+            }
+        }
     </script>
 </div>
 </body>

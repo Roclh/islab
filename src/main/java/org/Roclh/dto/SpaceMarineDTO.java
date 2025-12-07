@@ -27,6 +27,5 @@ public class SpaceMarineDTO {
 
     private Long height;
 
-    @NotNull(message = "Melee weapon cannot be null")
     private MeleeWeapon meleeWeapon;
 }

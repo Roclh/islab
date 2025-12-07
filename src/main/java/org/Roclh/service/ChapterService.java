@@ -18,7 +18,6 @@ import java.util.Optional;
 public class ChapterService {
 
     private final ChapterRepository chapterRepository;
-    private final WebSocketService webSocketService;
 
     public List<Chapter> findAll() {
         return chapterRepository.findAll();
@@ -31,13 +30,15 @@ public class ChapterService {
     public Chapter save(Chapter chapter) {
         Chapter saved = chapterRepository.save(chapter);
         log.info("Chapter saved, sending WebSocket notification");
-        webSocketService.notifySpaceMarineUpdate();
         return saved;
     }
 
     public void deleteById(Long id) {
         chapterRepository.deleteById(id);
         log.info("Chapter deleted, sending WebSocket notification");
-        webSocketService.notifySpaceMarineUpdate();
+    }
+
+    public List<Chapter> getChapters() {
+        return chapterRepository.findAll();
     }
 }

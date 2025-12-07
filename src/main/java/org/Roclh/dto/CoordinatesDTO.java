@@ -1,15 +1,15 @@
 package org.Roclh.dto;
 
+import jakarta.validation.constraints.DecimalMax;
 import lombok.Data;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 
 @Data
 public class CoordinatesDTO {
 
     @NotNull(message = "X coordinate cannot be null")
-    @DecimalMin(value = "-674", inclusive = false, message = "X must be greater than -675")
-    private Double x;
+    @DecimalMax(value = "535", inclusive = false, message = "X must be less than 535")
+    private Integer x;
 
-    private float y;
+    private long y;
 }

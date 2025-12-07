@@ -68,7 +68,6 @@ public class SpaceMarine {
     private Long height;
 
     @Enumerated(EnumType.STRING)
-    @NotNull(message = "Melee weapon cannot be null")
     private MeleeWeapon meleeWeapon;
 
     @Override

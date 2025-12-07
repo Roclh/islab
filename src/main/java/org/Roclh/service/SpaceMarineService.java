@@ -4,14 +4,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.Roclh.model.Chapter;
 import org.Roclh.model.SpaceMarine;
+import org.Roclh.repository.ChapterRepository;
 import org.Roclh.repository.SpaceMarineRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -20,6 +19,7 @@ import java.util.Optional;
 public class SpaceMarineService {
 
     private final SpaceMarineRepository spaceMarineRepository;
+    private final ChapterRepository chapterRepository;
     private final WebSocketService webSocketService;
 
     public Page<SpaceMarine> findAll(Pageable pageable) {
@@ -37,14 +37,23 @@ public class SpaceMarineService {
     public SpaceMarine save(SpaceMarine spaceMarine) {
         SpaceMarine saved = spaceMarineRepository.save(spaceMarine);
         log.info("Space Marine saved, sending WebSocket notification");
-        webSocketService.notifySpaceMarineUpdate();
         return saved;
     }
 
-    public void deleteById(Long id) {
-        spaceMarineRepository.deleteById(id);
-        log.info("Space Marine deleted, sending WebSocket notification");
-        webSocketService.notifySpaceMarineUpdate();
+    public void deleteWithChapterUpdate(Long id) {
+        try {
+            SpaceMarine spaceMarine = spaceMarineRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("SpaceMarine not found"));
+            Chapter chapter = spaceMarine.getChapter();
+            if (chapter != null) {
+                chapter.setMarinesCount(chapter.getMarinesCount() - 1);
+                chapterRepository.save(chapter);
+            }
+            int amount = spaceMarineRepository.deleteMarineById(id);
+            log.info("{} Space Marines deleted with chapter update, sending WebSocket notification", amount);
+        } catch (Exception e) {
+            log.error("Ошибка удаления марина: ", e);
+        }
     }
 
     public SpaceMarine findLatest() {
@@ -54,21 +63,6 @@ public class SpaceMarineService {
             log.error("Error finding latest space marine: {}", e.getMessage());
             return null;
         }
-    }
-
-    public Map<String, Long> getChapterStatistics() {
-        Map<String, Long> stats = new HashMap<>();
-        try {
-            List<Object[]> results = spaceMarineRepository.countByChapterGroup();
-            for (Object[] result : results) {
-                Chapter chapter = (Chapter) result[0];
-                Long count = (Long) result[1];
-                stats.put(chapter.getName(), count);
-            }
-        } catch (Exception e) {
-            log.error("Error getting chapter statistics: {}", e.getMessage());
-        }
-        return stats;
     }
 
     public Long countByHealthGreaterThan(Float health) {

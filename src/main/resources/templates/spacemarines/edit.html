@@ -36,8 +36,8 @@
                             <div class="col-md-6">
                                 <label for="x" class="form-label">Координата X *</label>
                                 <input type="number" step="any" class="form-control"
-                                       id="x" name="x" required min="-674" th:value="${x}">
-                                <div class="form-text">Must be greater than -675</div>
+                                       id="x" name="x" required max="535" th:value="${x}">
+                                <div class="form-text">Must be lower than 535</div>
                             </div>
                             <div class="col-md-6">
                                 <label for="y" class="form-label">Координата Y</label>

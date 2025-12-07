@@ -6,7 +6,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -31,6 +34,14 @@ public class Chapter {
     private String name;
 
     private String parentLegion;
+
+    @DecimalMin(value = "0", inclusive = false, message = "Count must be greater than 0")
+    @DecimalMax(value = "1000", message = "Count must be less or equal than 1000")
+    private long marinesCount;
+
+    @NotNull(message = "Chapter world cannot be null")
+    @Column(nullable = false)
+    private String world;
 
     @Override
     public final boolean equals(Object o) {

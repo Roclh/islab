@@ -5,13 +5,13 @@ import org.Roclh.model.Chapter;
 import org.Roclh.model.SpaceMarine;
 import org.Roclh.service.ChapterService;
 import org.Roclh.service.SpaceMarineService;
+import org.Roclh.service.WebSocketService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
 
 @Controller
 @RequestMapping("/special")
@@ -20,6 +20,7 @@ public class SpecialOperationsController {
 
     private final SpaceMarineService spaceMarineService;
     private final ChapterService chapterService;
+    private final WebSocketService webSocketService;
 
     @GetMapping
     public String specialOperations(Model model) {
@@ -37,10 +38,9 @@ public class SpecialOperationsController {
     @GetMapping("/chapter-stats")
     public String getChapterStats(Model model) {
         try {
-            Map<String, Long> stats = spaceMarineService.getChapterStatistics();
-            model.addAttribute("stats", stats);
+            model.addAttribute("stats", chapterService.getChapters());
         } catch (Exception e) {
-            model.addAttribute("stats", new HashMap<String, Long>());
+            model.addAttribute("stats", new ArrayList<Chapter>());
         }
         return "special/chapter-stats";
     }
@@ -61,6 +61,8 @@ public class SpecialOperationsController {
     @PostMapping("/create-chapter")
     public String createChapter(@RequestParam String name,
                                 @RequestParam(required = false) String parentLegion,
+                                @RequestParam String world,
+                                @RequestParam Long marinesCount,
                                 RedirectAttributes redirectAttributes) {
         try {
             boolean exists = chapterService.findAll().stream()
@@ -72,8 +74,10 @@ public class SpecialOperationsController {
                 Chapter chapter = new Chapter();
                 chapter.setName(name);
                 chapter.setParentLegion(parentLegion);
-
+                chapter.setWorld(world);
+                chapter.setMarinesCount(marinesCount);
                 chapterService.save(chapter);
+                webSocketService.notifySpaceMarineUpdate();
                 redirectAttributes.addFlashAttribute("success", "Chapter '" + name + "' created successfully");
             }
         } catch (Exception e) {
@@ -90,6 +94,7 @@ public class SpecialOperationsController {
                     .orElseThrow(() -> new RuntimeException("Chapter not found"));
 
             chapterService.deleteById(chapterId);
+            webSocketService.notifySpaceMarineUpdate();
             redirectAttributes.addFlashAttribute("success", "Chapter '" + chapter.getName() + "' deleted successfully");
         } catch (Exception e) {
             redirectAttributes.addFlashAttribute("error", "Error deleting chapter: " + e.getMessage());

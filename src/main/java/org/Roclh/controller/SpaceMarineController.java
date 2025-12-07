@@ -1,22 +1,27 @@
 package org.Roclh.controller;
 
+import jakarta.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.Roclh.model.Chapter;
 import org.Roclh.model.Coordinates;
 import org.Roclh.model.MeleeWeapon;
 import org.Roclh.model.SpaceMarine;
 import org.Roclh.service.ChapterService;
 import org.Roclh.service.SpaceMarineService;
+import org.Roclh.service.WebSocketService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
 
+@Slf4j
 @Controller
 @RequiredArgsConstructor
 @RequestMapping("/spacemarines")
@@ -24,6 +29,7 @@ public class SpaceMarineController {
 
     private final SpaceMarineService spaceMarineService;
     private final ChapterService chapterService;
+    private final WebSocketService webSocketService;
 
     @GetMapping
     public String listSpaceMarines(
@@ -34,29 +40,40 @@ public class SpaceMarineController {
             @RequestParam(required = false) String filter,
             Model model) {
 
-        // Создаем объект сортировки
-        Sort sort = sortDirection.equalsIgnoreCase("desc")
-                ? Sort.by(sortField).descending()
-                : Sort.by(sortField).ascending();
+        log.info("Loading spacemarines list - page: {}, size: {}, sortField: {}, sortDirection: {}, filter: {}",
+                page, size, sortField, sortDirection, filter);
 
-        Pageable pageable = PageRequest.of(page, size, sort);
-        Page<SpaceMarine> spaceMarinePage;
+        try {
+            // Создаем объект сортировки
+            Sort sort = sortDirection.equalsIgnoreCase("desc")
+                    ? Sort.by(sortField).descending()
+                    : Sort.by(sortField).ascending();
 
-        if (filter != null && !filter.trim().isEmpty()) {
-            spaceMarinePage = spaceMarineService.findByNameContaining(filter.trim(), pageable);
-        } else {
-            spaceMarinePage = spaceMarineService.findAll(pageable);
+            Pageable pageable = PageRequest.of(page, size, sort);
+            Page<SpaceMarine> spaceMarinePage;
+
+            if (filter != null && !filter.trim().isEmpty()) {
+                spaceMarinePage = spaceMarineService.findByNameContaining(filter.trim(), pageable);
+            } else {
+                spaceMarinePage = spaceMarineService.findAll(pageable);
+            }
+
+            model.addAttribute("spaceMarines", spaceMarinePage.getContent());
+            model.addAttribute("currentPage", page);
+            model.addAttribute("totalPages", spaceMarinePage.getTotalPages());
+            model.addAttribute("sortField", sortField);
+            model.addAttribute("sortDirection", sortDirection);
+            model.addAttribute("filter", filter);
+            model.addAttribute("chapters", chapterService.findAll());
+
+            log.info("Successfully loaded {} space marines", spaceMarinePage.getNumberOfElements());
+            return "spacemarines/list";
+
+        } catch (Exception e) {
+            log.error("Error loading space marines list: {}", e.getMessage(), e);
+            model.addAttribute("error", "Error loading space marines: " + e.getMessage());
+            return "spacemarines/list";
         }
-
-        model.addAttribute("spaceMarines", spaceMarinePage.getContent());
-        model.addAttribute("currentPage", page);
-        model.addAttribute("totalPages", spaceMarinePage.getTotalPages());
-        model.addAttribute("sortField", sortField);
-        model.addAttribute("sortDirection", sortDirection);
-        model.addAttribute("filter", filter);
-        model.addAttribute("chapters", chapterService.findAll());
-
-        return "spacemarines/list";
     }
 
     @GetMapping("/{id}")
@@ -84,8 +101,8 @@ public class SpaceMarineController {
     @PostMapping("/create")
     public String createSpaceMarine(
             @RequestParam String name,
-            @RequestParam Double x,
-            @RequestParam(defaultValue = "0") float y,
+            @RequestParam Integer x,
+            @RequestParam(defaultValue = "0") long y,
             @RequestParam Float health,
             @RequestParam int heartCount,
             @RequestParam(required = false) Long height,
@@ -101,6 +118,10 @@ public class SpaceMarineController {
                 model.addAttribute("chapters", chapterService.findAll());
                 return "spacemarines/create";
             }
+            Chapter chapter1 = chapter.get();
+            if(chapter1.getMarinesCount() > 1000) {
+                throw new ValidationException("Space marines count breached 1000!");
+            }
 
             // Создаем координаты
             Coordinates coordinates = new Coordinates();
@@ -115,9 +136,11 @@ public class SpaceMarineController {
             spaceMarine.setHeartCount(heartCount);
             spaceMarine.setHeight(height);
             spaceMarine.setMeleeWeapon(meleeWeapon);
-            spaceMarine.setChapter(chapter.get());
-
+            spaceMarine.setChapter(chapter1);
+            chapter1.setMarinesCount(chapter1.getMarinesCount() + 1);
+            chapterService.save(chapter1);
             spaceMarineService.save(spaceMarine);
+            webSocketService.notifySpaceMarineUpdate();
             return "redirect:/spacemarines";
 
         } catch (Exception e) {
@@ -161,8 +184,8 @@ public class SpaceMarineController {
     public String updateSpaceMarine(
             @PathVariable Long id,
             @RequestParam String name,
-            @RequestParam Double x,
-            @RequestParam(defaultValue = "0") float y,
+            @RequestParam Integer x,
+            @RequestParam(defaultValue = "0") long y,
             @RequestParam Float health,
             @RequestParam int heartCount,
             @RequestParam(required = false) Long height,
@@ -196,9 +219,17 @@ public class SpaceMarineController {
             spaceMarine.setHeartCount(heartCount);
             spaceMarine.setHeight(height);
             spaceMarine.setMeleeWeapon(meleeWeapon);
-            spaceMarine.setChapter(chapter.get());
-
+            Chapter newChapter = chapter.get();
+            if (!spaceMarine.getChapter().getId().equals(id)) {
+                Chapter previous = spaceMarine.getChapter();
+                previous.setMarinesCount(previous.getMarinesCount() - 1);
+                newChapter.setMarinesCount(newChapter.getMarinesCount() + 1);
+                chapterService.save(previous);
+                chapterService.save(newChapter);
+            }
+            spaceMarine.setChapter(newChapter);
             spaceMarineService.save(spaceMarine);
+            webSocketService.notifySpaceMarineUpdate();
             return "redirect:/spacemarines";
 
         } catch (Exception e) {
@@ -219,8 +250,9 @@ public class SpaceMarineController {
     }
 
     @PostMapping("/{id}/delete")
-    public String deleteSpaceMarine(@PathVariable Long id) {
-        spaceMarineService.deleteById(id);
-        return "redirect:/spacemarines";
+    public ResponseEntity<String> deleteSpaceMarine(@PathVariable Long id) {
+        spaceMarineService.deleteWithChapterUpdate(id);
+        webSocketService.notifySpaceMarineUpdate();
+        return ResponseEntity.ok().build();
     }
 }
