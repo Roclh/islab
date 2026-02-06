@@ -9,6 +9,13 @@
         <format property="build.time" pattern="yyyy-MM-dd HH:mm:ss"/>
     </tstamp>
 
+    <taskdef resource="net/sf/antcontrib/antlib.xml">
+        <classpath>
+            <pathelement location="lib/ant-contrib.jar"/>
+        </classpath>
+    </taskdef>
+
+
     <!-- Display project information -->
     <target name="init">
         <echo message="=== SpaceMarine System Build ==="/>
@@ -142,111 +149,24 @@
         <echo message="XML validation completed successfully."/>
     </target>
 
-    <!-- Documentation target -->
-    <target name="doc" depends="build" description="Generate javadoc and add file hashes to MANIFEST.MF">
-        <echo message="Generating documentation and hashes..."/>
+    <target name="doc" depends="build" description="Generate javadoc and hashes">
+        <echo message="Generating documentation..."/>
 
-        <!-- Create directories -->
-        <mkdir dir="${javadoc.dir}"/>
-        <mkdir dir="${build.dir}/temp"/>
-
-        <!-- Step 1: Generate Javadoc using Maven -->
-        <echo message="Generating Javadoc..."/>
-        <exec executable="${maven.executable}" failonerror="true">
+        <!-- Генерируем Javadoc -->
+        <exec executable="${maven.executable}">
             <arg value="javadoc:javadoc"/>
         </exec>
 
-        <!-- Step 2: Calculate MD5 and SHA-1 hashes for all source files -->
-        <echo message="Calculating MD5 hashes..."/>
+        <!-- Создаем hash файлы -->
+        <checksum algorithm="MD5" todir="${build.dir}/hashes">
+            <fileset dir="${src.dir}"/>
+        </checksum>
 
-        <!-- Create file for MD5 hashes -->
-        <echo file="${build.dir}/temp/md5_hashes.txt" message="MD5 Hashes for ${project.name}${line.separator}${line.separator}"/>
+        <checksum algorithm="SHA1" todir="${build.dir}/hashes">
+            <fileset dir="${src.dir}"/>
+        </checksum>
 
-        <!-- Calculate MD5 for each source file using certutil -->
-        <apply executable="certutil" relative="true" dest="${build.dir}/temp" parallel="false"
-               output="${build.dir}/temp/md5_hashes.txt" append="true">
-            <arg value="-hashfile"/>
-            <srcfile/>
-            <arg value="MD5"/>
-            <fileset dir="${src.dir}">
-                <include name="**/*.java"/>
-            </fileset>
-            <fileset dir="${resources.dir}">
-                <include name="**/*"/>
-                <exclude name="**/*.md5"/>
-                <exclude name="**/*.sha1"/>
-            </fileset>
-            <mapper type="regexp" from="(.*)" to="MD5 (\1) = "/>
-        </apply>
-
-        <echo message="Calculating SHA-1 hashes..."/>
-
-        <!-- Create file for SHA-1 hashes -->
-        <echo file="${build.dir}/temp/sha1_hashes.txt" message="SHA-1 Hashes for ${project.name}${line.separator}${line.separator}"/>
-
-        <!-- Calculate SHA-1 for each source file -->
-        <apply executable="certutil" relative="true" dest="${build.dir}/temp" parallel="false"
-               output="${build.dir}/temp/sha1_hashes.txt" append="true">
-            <arg value="-hashfile"/>
-            <srcfile/>
-            <arg value="SHA1"/>
-            <fileset dir="${src.dir}">
-                <include name="**/*.java"/>
-            </fileset>
-            <fileset dir="${resources.dir}">
-                <include name="**/*"/>
-                <exclude name="**/*.md5"/>
-                <exclude name="**/*.sha1"/>
-            </fileset>
-            <mapper type="regexp" from="(.*)" to="SHA1 (\1) = "/>
-        </apply>
-
-        <!-- Step 3: Create enhanced MANIFEST.MF with hashes information -->
-        <echo message="Creating enhanced MANIFEST.MF..."/>
-
-        <!-- Create enhanced manifest -->
-        <manifest file="${build.dir}/temp/enhanced_manifest.mf">
-            <attribute name="Manifest-Version" value="1.0"/>
-            <attribute name="Created-By" value="Apache Ant ${ant.version}"/>
-            <attribute name="Build-Time" value="${build.time}"/>
-            <attribute name="Implementation-Title" value="${project.name}"/>
-            <attribute name="Implementation-Version" value="${project.version}"/>
-            <attribute name="Main-Class" value="${main.class}"/>
-            <attribute name="Class-Path" value="."/>
-            <attribute name="MD5-Hashes" value="Calculated for all source files"/>
-            <attribute name="SHA1-Hashes" value="Calculated for all source files"/>
-            <attribute name="Javadoc-Generated" value="true"/>
-        </manifest>
-
-        <!-- Step 4: Update JAR with enhanced manifest -->
-        <echo message="Updating JAR with enhanced manifest..."/>
-
-        <!-- Extract original JAR -->
-        <unzip src="${dist.dir}/${project.name}.jar" dest="${build.dir}/temp/original"/>
-
-        <!-- Copy enhanced manifest -->
-        <copy file="${build.dir}/temp/enhanced_manifest.mf"
-              tofile="${build.dir}/temp/original/META-INF/MANIFEST.MF" overwrite="true"/>
-
-        <!-- Copy hashes files to JAR -->
-        <copy file="${build.dir}/temp/md5_hashes.txt"
-              todir="${build.dir}/temp/original/META-INF"/>
-        <copy file="${build.dir}/temp/sha1_hashes.txt"
-              todir="${build.dir}/temp/original/META-INF"/>
-
-        <!-- Create new JAR with enhanced manifest -->
-        <jar destfile="${dist.dir}/${project.name}-enhanced.jar"
-             basedir="${build.dir}/temp/original"
-             manifest="${build.dir}/temp/original/META-INF/MANIFEST.MF"/>
-
-        <!-- Cleanup -->
-        <delete dir="${build.dir}/temp"/>
-
-        <echo message="Documentation and hashes completed successfully."/>
-        <echo message="Enhanced JAR created: ${dist.dir}/${project.name}-enhanced.jar"/>
-        <echo message="Javadoc available at: ${javadoc.dir}"/>
-        <echo message="MD5 hashes saved in: META-INF/md5_hashes.txt"/>
-        <echo message="SHA-1 hashes saved in: META-INF/sha1_hashes.txt"/>
+        <echo message="Documentation generated successfully"/>
     </target>
 
     <!-- Native2ascii target -->
@@ -750,76 +670,28 @@ success.operation=Операция успешно завершена"/>
         </java>
     </target>
 
-    <!-- Report target - save test reports to git -->
-    <target name="report" depends="test" description="Save test reports to git repository">
-        <echo message="Saving test reports to git..."/>
+    <target name="report" depends="test" description="Save test reports to git">
+        <echo message="Saving test reports..."/>
 
-        <!-- Check if tests passed -->
-        <condition property="tests.passed">
-            <and>
-                <isset property="tests.failed"/>
-                <isfalse value="${tests.failed}"/>
-            </and>
-        </condition>
+        <if>
+            <available file="${reports.dir}/TEST-*.xml"/>
+            <then>
+                <exec executable="git">
+                    <arg value="add"/>
+                    <arg value="${reports.dir}/TEST-*.xml"/>
+                </exec>
 
-        <antcall target="report-commit"/>
-        <antcall target="report-skip"/>
-    </target>
+                <exec executable="git">
+                    <arg value="commit"/>
+                    <arg value="-m"/>
+                    <arg value="Test report ${build.time}"/>
+                </exec>
 
-    <target name="report-commit" if="tests.passed">
-        <echo message="Tests passed, generating and committing test report..."/>
-
-        <!-- Create test reports directory -->
-        <mkdir dir="${build.dir}/test-reports"/>
-
-        <!-- Check if git is available -->
-        <exec executable="git" failonerror="false" resultproperty="git.available">
-            <arg value="--version"/>
-        </exec>
-
-        <condition property="git.ok">
-            <equals arg1="${git.available}" arg2="0"/>
-        </condition>
-
-        <antcall target="report-git-commit"/>
-        <antcall target="report-no-git"/>
-    </target>
-
-    <target name="report-git-commit" if="git.ok">
-        <!-- Get current timestamp -->
-        <tstamp>
-            <format property="report.timestamp" pattern="yyyy-MM-dd HH:mm:ss"/>
-        </tstamp>
-
-        <!-- Create a simple test report file -->
-        <echo file="${build.dir}/test-reports/test-summary.xml" append="false">
-            &lt;?xml version="1.0" encoding="UTF-8"?&gt;
-            &lt;testsuite name="SpaceMarineTests" timestamp="${report.timestamp}"&gt;
-            &lt;testcase name="BuildTest" classname="Build" time="0.0"/&gt;
-            &lt;testcase name="CompileTest" classname="Compile" time="0.0"/&gt;
-            &lt;/testsuite&gt;
-        </echo>
-
-        <!-- Add and commit the report -->
-        <exec executable="git" failonerror="false">
-            <arg value="add"/>
-            <arg value="${build.dir}/test-reports/test-summary.xml"/>
-        </exec>
-
-        <exec executable="git" failonerror="false">
-            <arg value="commit"/>
-            <arg value="-m"/>
-            <arg value="Test report ${report.timestamp}"/>
-        </exec>
-
-        <echo message="Test report committed to git repository"/>
-    </target>
-
-    <target name="report-no-git" unless="git.ok">
-        <echo message="Git not available, skipping commit"/>
-    </target>
-
-    <target name="report-skip" unless="tests.passed">
-        <echo message="Tests failed or not executed, skipping report commit"/>
+                <echo message="Test reports committed to git"/>
+            </then>
+            <else>
+                <echo message="No test reports found"/>
+            </else>
+        </if>
     </target>
 </project>
