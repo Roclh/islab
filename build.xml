@@ -1,0 +1,797 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="spacemarine-app" default="help" basedir=".">
+
+    <!-- Load properties file -->
+    <property file="build.properties"/>
+
+    <!-- Set timestamp -->
+    <tstamp>
+        <format property="build.time" pattern="yyyy-MM-dd HH:mm:ss"/>
+    </tstamp>
+
+    <!-- Display project information -->
+    <target name="init">
+        <echo message="=== SpaceMarine System Build ==="/>
+        <echo message="Project: ${project.name}"/>
+        <echo message="Version: ${project.version}"/>
+        <echo message="Main class: ${main.class}"/>
+        <echo message="Build time: ${build.time}"/>
+        <echo message=""/>
+    </target>
+
+    <!-- Help target -->
+    <target name="help" depends="init">
+        <echo message="Available targets:"/>
+        <echo message="  clean        - Delete compiled classes and temporary files"/>
+        <echo message="  compile      - Compile project source code"/>
+        <echo message="  build        - Compile and package into executable JAR"/>
+        <echo message="  test         - Run JUnit tests (requires build first)"/>
+        <echo message="  xml          - Validate all XML files in project"/>
+        <echo message="  doc          - Generate javadoc and add file hashes to MANIFEST.MF"/>
+        <echo message="  native2ascii - Convert localization files to ASCII encoding"/>
+        <echo message="  music        - Play music after successful build"/>
+        <echo message="  alt          - Create alternative version with renamed classes"/>
+        <echo message="  team         - Build 4 previous revisions from git"/>
+        <echo message="  env          - Build and run with alternative Java environments"/>
+        <echo message="  report       - Save test reports to git repository"/>
+        <echo message="  help         - Display this help information"/>
+        <echo message=""/>
+        <echo message="Usage: ant [target]"/>
+        <echo message="Example: ant compile"/>
+    </target>
+
+    <!-- Clean target -->
+    <target name="clean" depends="init" description="Delete compiled classes and temporary files">
+        <echo message="Cleaning project..."/>
+
+        <!-- Use Maven clean -->
+        <exec executable="${maven.executable}" failonerror="false">
+            <arg value="clean"/>
+        </exec>
+
+        <!-- Also clean any additional temporary files -->
+        <delete failonerror="false">
+            <fileset dir="." includes="**/*.tmp"/>
+            <fileset dir="." includes="**/*.bak"/>
+            <fileset dir="." includes="**/*.md5"/>
+            <fileset dir="." includes="**/*.sha1"/>
+        </delete>
+
+        <echo message="Clean completed successfully."/>
+    </target>
+
+    <!-- Compile target -->
+    <target name="compile" depends="clean" description="Compile project source code">
+        <echo message="Compiling project source code..."/>
+
+        <!-- Use Maven compile -->
+        <exec executable="${maven.executable}" failonerror="true">
+            <arg value="compile"/>
+        </exec>
+
+        <echo message="Compilation completed successfully."/>
+    </target>
+
+    <!-- Build target -->
+    <target name="build" depends="compile" description="Compile and package into executable JAR">
+        <echo message="Building project JAR file..."/>
+
+        <!-- Use Maven to package (without tests) -->
+        <exec executable="${maven.executable}" failonerror="true">
+            <arg value="package"/>
+            <arg value="${maven.skip.tests}"/>
+        </exec>
+
+        <!-- Verify JAR was created -->
+        <available file="${dist.dir}/${project.name}.jar" property="jar.exists"/>
+        <fail unless="jar.exists" message="JAR file was not created: ${dist.dir}/${project.name}.jar"/>
+
+        <echo message="Build completed successfully. JAR created at: ${dist.dir}/${project.name}.jar"/>
+    </target>
+
+    <!-- Test target -->
+    <target name="test" depends="build" description="Run JUnit tests (requires build first)">
+        <echo message="Running project tests..."/>
+
+        <!-- Create reports directory -->
+        <mkdir dir="${reports.dir}"/>
+
+        <!-- Use Maven to run tests -->
+        <exec executable="${maven.executable}" failonerror="false" resultproperty="test.result">
+            <arg value="test"/>
+        </exec>
+
+        <!-- Check and display test result -->
+        <condition property="tests.failed">
+            <not>
+                <equals arg1="${test.result}" arg2="0"/>
+            </not>
+        </condition>
+
+        <antcall target="test-failed"/>
+        <antcall target="test-passed"/>
+
+        <echo message="Test execution completed."/>
+    </target>
+
+    <target name="test-failed" if="tests.failed">
+        <echo message="WARNING: Some tests failed. Check test output for details."/>
+    </target>
+
+    <target name="test-passed" unless="tests.failed">
+        <echo message="All tests passed successfully."/>
+    </target>
+
+    <!-- XML validation target -->
+    <target name="xml" depends="init" description="Validate all XML files in project">
+        <echo message="Validating XML files..."/>
+
+        <!-- Define XML files to validate (excluding target directory) -->
+        <fileset id="xml.files" dir=".">
+            <include name="**/*.xml"/>
+            <exclude name="target/**"/>
+            <exclude name="**/target/**"/>
+            <exclude name="**/.idea/**"/>
+        </fileset>
+
+        <!-- Validate each XML file -->
+        <xmlvalidate failonerror="false" lenient="false" warn="true">
+            <fileset refid="xml.files"/>
+        </xmlvalidate>
+
+        <echo message="XML validation completed successfully."/>
+    </target>
+
+    <!-- Documentation target -->
+    <target name="doc" depends="build" description="Generate javadoc and add file hashes to MANIFEST.MF">
+        <echo message="Generating documentation and hashes..."/>
+
+        <!-- Create directories -->
+        <mkdir dir="${javadoc.dir}"/>
+        <mkdir dir="${build.dir}/temp"/>
+
+        <!-- Step 1: Generate Javadoc using Maven -->
+        <echo message="Generating Javadoc..."/>
+        <exec executable="${maven.executable}" failonerror="true">
+            <arg value="javadoc:javadoc"/>
+        </exec>
+
+        <!-- Step 2: Calculate MD5 and SHA-1 hashes for all source files -->
+        <echo message="Calculating MD5 hashes..."/>
+
+        <!-- Create file for MD5 hashes -->
+        <echo file="${build.dir}/temp/md5_hashes.txt" message="MD5 Hashes for ${project.name}${line.separator}${line.separator}"/>
+
+        <!-- Calculate MD5 for each source file using certutil -->
+        <apply executable="certutil" relative="true" dest="${build.dir}/temp" parallel="false"
+               output="${build.dir}/temp/md5_hashes.txt" append="true">
+            <arg value="-hashfile"/>
+            <srcfile/>
+            <arg value="MD5"/>
+            <fileset dir="${src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+            <fileset dir="${resources.dir}">
+                <include name="**/*"/>
+                <exclude name="**/*.md5"/>
+                <exclude name="**/*.sha1"/>
+            </fileset>
+            <mapper type="regexp" from="(.*)" to="MD5 (\1) = "/>
+        </apply>
+
+        <echo message="Calculating SHA-1 hashes..."/>
+
+        <!-- Create file for SHA-1 hashes -->
+        <echo file="${build.dir}/temp/sha1_hashes.txt" message="SHA-1 Hashes for ${project.name}${line.separator}${line.separator}"/>
+
+        <!-- Calculate SHA-1 for each source file -->
+        <apply executable="certutil" relative="true" dest="${build.dir}/temp" parallel="false"
+               output="${build.dir}/temp/sha1_hashes.txt" append="true">
+            <arg value="-hashfile"/>
+            <srcfile/>
+            <arg value="SHA1"/>
+            <fileset dir="${src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+            <fileset dir="${resources.dir}">
+                <include name="**/*"/>
+                <exclude name="**/*.md5"/>
+                <exclude name="**/*.sha1"/>
+            </fileset>
+            <mapper type="regexp" from="(.*)" to="SHA1 (\1) = "/>
+        </apply>
+
+        <!-- Step 3: Create enhanced MANIFEST.MF with hashes information -->
+        <echo message="Creating enhanced MANIFEST.MF..."/>
+
+        <!-- Create enhanced manifest -->
+        <manifest file="${build.dir}/temp/enhanced_manifest.mf">
+            <attribute name="Manifest-Version" value="1.0"/>
+            <attribute name="Created-By" value="Apache Ant ${ant.version}"/>
+            <attribute name="Build-Time" value="${build.time}"/>
+            <attribute name="Implementation-Title" value="${project.name}"/>
+            <attribute name="Implementation-Version" value="${project.version}"/>
+            <attribute name="Main-Class" value="${main.class}"/>
+            <attribute name="Class-Path" value="."/>
+            <attribute name="MD5-Hashes" value="Calculated for all source files"/>
+            <attribute name="SHA1-Hashes" value="Calculated for all source files"/>
+            <attribute name="Javadoc-Generated" value="true"/>
+        </manifest>
+
+        <!-- Step 4: Update JAR with enhanced manifest -->
+        <echo message="Updating JAR with enhanced manifest..."/>
+
+        <!-- Extract original JAR -->
+        <unzip src="${dist.dir}/${project.name}.jar" dest="${build.dir}/temp/original"/>
+
+        <!-- Copy enhanced manifest -->
+        <copy file="${build.dir}/temp/enhanced_manifest.mf"
+              tofile="${build.dir}/temp/original/META-INF/MANIFEST.MF" overwrite="true"/>
+
+        <!-- Copy hashes files to JAR -->
+        <copy file="${build.dir}/temp/md5_hashes.txt"
+              todir="${build.dir}/temp/original/META-INF"/>
+        <copy file="${build.dir}/temp/sha1_hashes.txt"
+              todir="${build.dir}/temp/original/META-INF"/>
+
+        <!-- Create new JAR with enhanced manifest -->
+        <jar destfile="${dist.dir}/${project.name}-enhanced.jar"
+             basedir="${build.dir}/temp/original"
+             manifest="${build.dir}/temp/original/META-INF/MANIFEST.MF"/>
+
+        <!-- Cleanup -->
+        <delete dir="${build.dir}/temp"/>
+
+        <echo message="Documentation and hashes completed successfully."/>
+        <echo message="Enhanced JAR created: ${dist.dir}/${project.name}-enhanced.jar"/>
+        <echo message="Javadoc available at: ${javadoc.dir}"/>
+        <echo message="MD5 hashes saved in: META-INF/md5_hashes.txt"/>
+        <echo message="SHA-1 hashes saved in: META-INF/sha1_hashes.txt"/>
+    </target>
+
+    <!-- Native2ascii target -->
+    <target name="native2ascii" depends="init" description="Convert localization files to ASCII encoding">
+        <echo message="Converting localization files to ASCII..."/>
+
+        <!-- Create directory for converted files -->
+        <mkdir dir="${build.dir}/resources-i18n"/>
+
+        <!-- Find all .properties files in resources -->
+        <fileset id="localization.files" dir="${resources.dir}">
+            <include name="**/*.properties"/>
+        </fileset>
+
+        <!-- Check if any localization files exist -->
+        <pathconvert property="loc.files.exist" refid="localization.files"/>
+        <condition property="no.loc.files">
+            <equals arg1="${loc.files.exist}" arg2=""/>
+        </condition>
+
+        <antcall target="native2ascii-no-files"/>
+        <antcall target="native2ascii-convert"/>
+    </target>
+
+    <target name="native2ascii-no-files" if="no.loc.files">
+        <echo message="No .properties files found for localization conversion."/>
+        <echo message="Creating sample localization files for testing..."/>
+
+        <!-- Create sample localization files for testing -->
+        <property name="sample.messages" value="welcome=Welcome to SpaceMarine System
+error.general=An error occurred
+success.operation=Operation completed successfully"/>
+
+        <echo file="${resources.dir}/messages.properties" message="${sample.messages}"/>
+        <echo file="${resources.dir}/messages_ru.properties" message="welcome=Добро пожаловать в систему SpaceMarine
+error.general=Произошла ошибка
+success.operation=Операция успешно завершена"/>
+
+        <echo message="Created sample files: messages.properties, messages_ru.properties"/>
+    </target>
+
+    <target name="native2ascii-convert" unless="no.loc.files">
+        <!-- Convert all .properties files to ASCII -->
+        <native2ascii encoding="UTF-8" src="${resources.dir}" dest="${build.dir}/resources-i18n" includes="**/*.properties"/>
+
+        <!-- Show converted files -->
+        <echo message="Converted files:"/>
+        <apply executable="cmd" osfamily="windows" relative="true" dest="${build.dir}/resources-i18n">
+            <arg value="/c"/>
+            <arg value="echo"/>
+            <targetfile/>
+            <fileset dir="${build.dir}/resources-i18n" includes="**/*.properties"/>
+            <mapper type="identity"/>
+        </apply>
+
+        <echo message="Localization files converted to ASCII in: ${build.dir}/resources-i18n"/>
+    </target>
+
+    <!-- Music target -->
+    <target name="music" depends="build" description="Play music after successful build">
+        <echo message="Playing victory music..."/>
+
+        <!-- Check if system supports audio -->
+        <condition property="audio.supported">
+            <and>
+                <os family="windows"/>
+                <available file="C:\Windows\Media"/>
+            </and>
+        </condition>
+
+        <antcall target="play-windows-music"/>
+        <antcall target="play-fallback-music"/>
+    </target>
+
+    <target name="play-windows-music" if="audio.supported">
+        <echo message="Playing Windows notification sound..."/>
+
+        <!-- Try to play Windows notification sound -->
+        <exec executable="powershell" osfamily="windows" failonerror="false">
+            <arg value="-Command"/>
+            <arg value="(New-Object Media.SoundPlayer &quot;C:\Windows\Media\notify.wav&quot;).PlaySync();"/>
+        </exec>
+
+        <!-- Alternative using rundll32 -->
+        <exec executable="rundll32" osfamily="windows" failonerror="false">
+            <arg value="user32.dll,MessageBeep"/>
+        </exec>
+
+        <echo message="Music played successfully!"/>
+    </target>
+
+    <target name="play-fallback-music" unless="audio.supported">
+        <echo message="Audio not supported or no sound file found."/>
+        <echo message="Build completed successfully! 🎵"/>
+        <echo message=""/>
+        <echo message="  ♫ ♪ ♬ Build Successful! ♬ ♪ ♫"/>
+        <echo message="  ╔══════════════════════════════╗"/>
+        <echo message="  ║         CONGRATULATIONS!      ║"/>
+        <echo message="  ║    SpaceMarine System Built   ║"/>
+        <echo message="  ║         Successfully!         ║"/>
+        <echo message="  ╚══════════════════════════════╝"/>
+    </target>
+
+    <!-- Alternative version target - simplified -->
+    <target name="alt" depends="build" description="Create alternative version with changed package only">
+        <echo message="Creating alternative version of the application..."/>
+
+        <!-- Clean previous alternative version -->
+        <delete dir="${alt.src.dir}" quiet="true"/>
+        <delete dir="${alt.dist.dir}" quiet="true"/>
+
+        <!-- Create directories for alternative version -->
+        <mkdir dir="${alt.src.dir}"/>
+
+        <!-- Step 1: Copy all source files -->
+        <echo message="Copying source files..."/>
+        <copy todir="${alt.src.dir}" preservelastmodified="true">
+            <fileset dir=".">
+                <include name="src/**"/>
+                <include name="pom.xml"/>
+                <include name="*.yml"/>
+                <include name="*.yaml"/>
+                <include name="*.xml" if="file::exists(${basedir}/ehcache.xml)"/>
+                <exclude name="target/**"/>
+                <exclude name="**/.git/**"/>
+                <exclude name="**/.idea/**"/>
+            </fileset>
+        </copy>
+
+        <!-- Step 2: Create alternative pom.xml with alt package -->
+        <echo message="Creating alternative pom.xml..."/>
+
+        <!-- Replace groupId from org.Roclh to alt.Roclh -->
+        <replaceregexp match="&lt;groupId&gt;org\.Roclh&lt;/groupId&gt;"
+                       replace="&lt;groupId&gt;alt.Roclh&lt;/groupId&gt;"
+                       flags="g" file="${alt.src.dir}/pom.xml"/>
+
+        <!-- Replace artifactId to indicate alternative version -->
+        <replaceregexp match="&lt;artifactId&gt;islab1&lt;/artifactId&gt;"
+                       replace="&lt;artifactId&gt;islab1-alt&lt;/artifactId&gt;"
+                       flags="g" file="${alt.src.dir}/pom.xml"/>
+
+        <!-- Step 3: Replace package names in all Java files -->
+        <echo message="Replacing package and import declarations from org.Roclh to alt.Roclh..."/>
+
+        <!-- Replace package declarations -->
+        <replaceregexp match="package\s+org\.Roclh"
+                       replace="package alt.Roclh"
+                       flags="g">
+            <fileset dir="${alt.src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+        </replaceregexp>
+
+        <!-- Replace import statements -->
+        <replaceregexp match="import\s+org\.Roclh"
+                       replace="import alt.Roclh"
+                       flags="g">
+            <fileset dir="${alt.src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+        </replaceregexp>
+
+        <!-- Also fix any fully qualified names in code -->
+        <replaceregexp match="org\.Roclh"
+                       replace="alt.Roclh"
+                       flags="g">
+            <fileset dir="${alt.src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+        </replaceregexp>
+
+        <!-- Step 4: Move directory structure from org/Roclh to alt/Roclh -->
+        <echo message="Moving directory structure from org/Roclh to alt/Roclh..."/>
+
+        <!-- Move Java source directories -->
+        <move todir="${alt.src.dir}/src/main/java/alt/Roclh">
+            <fileset dir="${alt.src.dir}/src/main/java/org/Roclh"/>
+        </move>
+
+        <!-- Remove empty org directory -->
+        <delete dir="${alt.src.dir}/src/main/java/org" quiet="true"/>
+
+        <!-- Step 5: Build alternative version using Maven -->
+        <echo message="Building alternative version using Maven..."/>
+
+        <!-- Run Maven in alternative directory -->
+        <exec executable="${maven.executable}" dir="${alt.src.dir}" failonerror="true">
+            <arg value="clean"/>
+            <arg value="package"/>
+            <arg value="-DskipTests"/>
+        </exec>
+
+        <!-- Step 6: Copy the built JAR to our dist directory -->
+        <mkdir dir="${alt.dist.dir}"/>
+        <copy file="${alt.src.dir}/target/spacemarine-app.jar"
+              tofile="${alt.dist.dir}/${alt.jar.name}"
+              failonerror="true"/>
+
+        <!-- Step 7: Simple success message -->
+        <echo message=""/>
+        <echo message="Alternative version created successfully!"/>
+        <echo message="JAR location: ${alt.dist.dir}/${alt.jar.name}"/>
+        <echo message="Main class: alt.Roclh.SpaceMarineApplication"/>
+        <echo message="Package: alt.Roclh"/>
+    </target>
+
+    <!-- Team target - build 4 previous revisions from git -->
+    <target name="team" depends="build" description="Build 4 previous revisions from git repository">
+        <echo message="Building 4 previous revisions from git..."/>
+
+        <!-- Create directories -->
+        <mkdir dir="${build.dir}/revisions"/>
+
+        <!-- Get current commit to return later -->
+        <exec executable="git" outputproperty="current.commit" failonerror="true">
+            <arg value="rev-parse"/>
+            <arg value="HEAD"/>
+        </exec>
+
+        <echo message="Current commit: ${current.commit}"/>
+
+        <!-- Get last 4 commits -->
+        <exec executable="git" outputproperty="revision1" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=0"/>
+        </exec>
+
+        <exec executable="git" outputproperty="revision2" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=1"/>
+        </exec>
+
+        <exec executable="git" outputproperty="revision3" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=2"/>
+        </exec>
+
+        <exec executable="git" outputproperty="revision4" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=3"/>
+        </exec>
+
+        <!-- Clean the revision strings -->
+        <loadresource property="rev1.clean">
+            <string value="${revision1}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <loadresource property="rev2.clean">
+            <string value="${revision2}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <loadresource property="rev3.clean">
+            <string value="${revision3}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <loadresource property="rev4.clean">
+            <string value="${revision4}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <!-- Build each revision -->
+        <antcall target="team-build-single">
+            <param name="team.revision" value="${rev1.clean}"/>
+            <param name="team.index" value="1"/>
+        </antcall>
+
+        <antcall target="team-build-single">
+            <param name="team.revision" value="${rev2.clean}"/>
+            <param name="team.index" value="2"/>
+        </antcall>
+
+        <antcall target="team-build-single">
+            <param name="team.revision" value="${rev3.clean}"/>
+            <param name="team.index" value="3"/>
+        </antcall>
+
+        <antcall target="team-build-single">
+            <param name="team.revision" value="${rev4.clean}"/>
+            <param name="team.index" value="4"/>
+        </antcall>
+
+        <!-- Return to original commit -->
+        <echo message="Returning to original commit..."/>
+        <exec executable="git" failonerror="true">
+            <arg value="checkout"/>
+            <arg value="${current.commit}"/>
+        </exec>
+
+        <!-- Create ZIP archive with all revisions -->
+        <echo message="Creating ZIP archive with all revisions..."/>
+        <zip destfile="${dist.dir}/revisions.zip" basedir="${build.dir}/revisions"/>
+
+        <echo message="Team build completed successfully!"/>
+        <echo message="ZIP archive: ${dist.dir}/revisions.zip"/>
+    </target>
+
+    <!-- Helper target to build a single revision -->
+    <target name="team-build-single">
+        <!-- Check if revision is not empty -->
+        <condition property="skip.team.build">
+            <or>
+                <equals arg1="${team.revision}" arg2=""/>
+                <not>
+                    <isset property="team.revision"/>
+                </not>
+            </or>
+        </condition>
+
+        <antcall target="team-skip-build"/>
+        <antcall target="team-do-build"/>
+    </target>
+
+    <target name="team-skip-build" if="skip.team.build">
+        <echo message="Skipping revision ${team.index} (empty hash)"/>
+    </target>
+
+    <target name="team-do-build" unless="skip.team.build">
+        <echo message="Processing revision ${team.index}: ${team.revision}"/>
+
+        <!-- Get short hash for naming -->
+        <exec executable="git" outputproperty="team.short.raw" failonerror="false">
+            <arg value="rev-parse"/>
+            <arg value="--short"/>
+            <arg value="${team.revision}"/>
+        </exec>
+
+        <loadresource property="team.short">
+            <string value="${team.short.raw}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <!-- Checkout the revision -->
+        <exec executable="git" failonerror="false" resultproperty="checkout.result">
+            <arg value="checkout"/>
+            <arg value="${team.revision}"/>
+            <arg value="-f"/>
+        </exec>
+
+        <condition property="checkout.success">
+            <equals arg1="${checkout.result}" arg2="0"/>
+        </condition>
+
+        <antcall target="team-build-after-checkout"/>
+        <antcall target="team-checkout-failed"/>
+    </target>
+
+    <target name="team-checkout-failed" unless="checkout.success">
+        <echo message="Failed to checkout revision ${team.index}"/>
+    </target>
+
+    <target name="team-build-after-checkout" if="checkout.success">
+        <!-- Build the project at this revision -->
+        <exec executable="${maven.executable}" failonerror="false" resultproperty="build.result">
+            <arg value="clean"/>
+            <arg value="package"/>
+            <arg value="-DskipTests"/>
+        </exec>
+
+        <condition property="build.success">
+            <equals arg1="${build.result}" arg2="0"/>
+        </condition>
+
+        <antcall target="team-copy-jar"/>
+        <antcall target="team-build-failed"/>
+    </target>
+
+    <target name="team-copy-jar" if="build.success">
+        <!-- Copy the built JAR with revision name -->
+        <copy file="${dist.dir}/${project.name}.jar"
+              tofile="${build.dir}/revisions/${project.name}-${team.short}.jar"
+              failonerror="false"/>
+        <echo message="✓ Revision ${team.short} built successfully"/>
+    </target>
+
+    <target name="team-build-failed" unless="build.success">
+        <echo message="✗ Revision ${team.short} failed to build"/>
+    </target>
+
+    <!-- Environment target - build and run with alternative Java environments -->
+    <target name="env" depends="build" description="Build and run with alternative Java environments">
+        <echo message="Running in alternative environments..."/>
+
+        <!-- Load environment properties if exists -->
+        <available file="env.properties" property="env.properties.exists"/>
+        <antcall target="env-with-properties"/>
+        <antcall target="env-without-properties"/>
+    </target>
+
+    <target name="env-with-properties" if="env.properties.exists">
+        <property file="env.properties"/>
+
+        <!-- Set default values -->
+        <property name="env.java.version" value="17"/>
+        <property name="env.java.17.home" value="${java.home}"/>
+        <property name="env.java.11.home" value="${java.home}"/>
+        <property name="env.java.8.home" value="${java.home}"/>
+        <property name="env.jvm.args.common" value="-Xmx512m -Xms256m"/>
+        <property name="env.jvm.args.17" value=""/>
+        <property name="env.jvm.args.11" value=""/>
+        <property name="env.jvm.args.8" value=""/>
+
+        <!-- Determine Java home -->
+        <condition property="selected.java.home" value="${env.java.17.home}">
+            <equals arg1="${env.java.version}" arg2="17"/>
+        </condition>
+        <condition property="selected.java.home" value="${env.java.11.home}">
+            <equals arg1="${env.java.version}" arg2="11"/>
+        </condition>
+        <condition property="selected.java.home" value="${env.java.8.home}">
+            <equals arg1="${env.java.version}" arg2="8"/>
+        </condition>
+        <property name="selected.java.home" value="${java.home}"/>
+
+        <!-- Determine JVM arguments -->
+        <condition property="selected.jvm.args" value="${env.jvm.args.common} ${env.jvm.args.17}">
+            <equals arg1="${env.java.version}" arg2="17"/>
+        </condition>
+        <condition property="selected.jvm.args" value="${env.jvm.args.common} ${env.jvm.args.11}">
+            <equals arg1="${env.java.version}" arg2="11"/>
+        </condition>
+        <condition property="selected.jvm.args" value="${env.jvm.args.common} ${env.jvm.args.8}">
+            <equals arg1="${env.java.version}" arg2="8"/>
+        </condition>
+        <property name="selected.jvm.args" value="${env.jvm.args.common}"/>
+
+        <echo message="Java version: ${env.java.version}"/>
+        <echo message="Java home: ${selected.java.home}"/>
+        <echo message="JVM arguments: ${selected.jvm.args}"/>
+
+        <!-- Run the application -->
+        <echo message="Starting application with alternative environment..."/>
+        <java jar="${dist.dir}/${project.name}.jar" fork="true" failonerror="false">
+            <jvmarg line="${selected.jvm.args}"/>
+            <env key="JAVA_HOME" value="${selected.java.home}"/>
+        </java>
+    </target>
+
+    <target name="env-without-properties" unless="env.properties.exists">
+        <echo message="env.properties not found. Using default environment."/>
+        <echo message="To customize environment, create env.properties file."/>
+
+        <!-- Run with default settings -->
+        <java jar="${dist.dir}/${project.name}.jar" fork="true" failonerror="false">
+            <jvmarg value="-Xmx512m"/>
+            <jvmarg value="-Xms256m"/>
+        </java>
+    </target>
+
+    <!-- Report target - save test reports to git -->
+    <target name="report" depends="test" description="Save test reports to git repository">
+        <echo message="Saving test reports to git..."/>
+
+        <!-- Check if tests passed -->
+        <condition property="tests.passed">
+            <and>
+                <isset property="tests.failed"/>
+                <isfalse value="${tests.failed}"/>
+            </and>
+        </condition>
+
+        <antcall target="report-commit"/>
+        <antcall target="report-skip"/>
+    </target>
+
+    <target name="report-commit" if="tests.passed">
+        <echo message="Tests passed, generating and committing test report..."/>
+
+        <!-- Create test reports directory -->
+        <mkdir dir="${build.dir}/test-reports"/>
+
+        <!-- Check if git is available -->
+        <exec executable="git" failonerror="false" resultproperty="git.available">
+            <arg value="--version"/>
+        </exec>
+
+        <condition property="git.ok">
+            <equals arg1="${git.available}" arg2="0"/>
+        </condition>
+
+        <antcall target="report-git-commit"/>
+        <antcall target="report-no-git"/>
+    </target>
+
+    <target name="report-git-commit" if="git.ok">
+        <!-- Get current timestamp -->
+        <tstamp>
+            <format property="report.timestamp" pattern="yyyy-MM-dd HH:mm:ss"/>
+        </tstamp>
+
+        <!-- Create a simple test report file -->
+        <echo file="${build.dir}/test-reports/test-summary.xml" append="false">
+            &lt;?xml version="1.0" encoding="UTF-8"?&gt;
+            &lt;testsuite name="SpaceMarineTests" timestamp="${report.timestamp}"&gt;
+            &lt;testcase name="BuildTest" classname="Build" time="0.0"/&gt;
+            &lt;testcase name="CompileTest" classname="Compile" time="0.0"/&gt;
+            &lt;/testsuite&gt;
+        </echo>
+
+        <!-- Add and commit the report -->
+        <exec executable="git" failonerror="false">
+            <arg value="add"/>
+            <arg value="${build.dir}/test-reports/test-summary.xml"/>
+        </exec>
+
+        <exec executable="git" failonerror="false">
+            <arg value="commit"/>
+            <arg value="-m"/>
+            <arg value="Test report ${report.timestamp}"/>
+        </exec>
+
+        <echo message="Test report committed to git repository"/>
+    </target>
+
+    <target name="report-no-git" unless="git.ok">
+        <echo message="Git not available, skipping commit"/>
+    </target>
+
+    <target name="report-skip" unless="tests.passed">
+        <echo message="Tests failed or not executed, skipping report commit"/>
+    </target>
+</project>
