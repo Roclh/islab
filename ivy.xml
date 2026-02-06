@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<ivy-module version="2.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:noNamespaceSchemaLocation="http://ant.apache.org/ivy/schemas/ivy.xsd">
+    <info organisation="in.ex" module="ivy-example" status="integration">
+    </info>
+    <configurations>
+        <conf name="jars" description="Jars"/>
+    </configurations>
+    <dependencies>
+        <dependency org="javax.servlet" name="javax.servlet-api" rev="3.1.0" conf="jars->default" />
+        <dependency org="com.sun.faces" name="jsf-api" rev="2.2.15" conf="jars->default" />
+        <dependency org="com.sun.faces" name="jsf-impl" rev="2.2.15" conf="jars->default" />
+        <dependency org="org.primefaces" name="primefaces" rev="6.1" conf="jars->default" />
+        <dependency org="org.eclipse.persistence" name="eclipselink" rev="2.7.9" conf="jars->default" />
+        <dependency org="jakarta.persistence" name="jakarta.persistence-api" rev="2.2.3" conf="jars->default" />
+        <dependency org="org.postgresql" name="postgresql" rev="42.2.18" conf="jars->default" />
+        <dependency org="org.junit.jupiter" name="junit-jupiter-api" rev="5.9.1" conf="jars->default" />
+        <dependency org="org.junit.platform" name="junit-platform-launcher" rev="1.9.3" conf="jars->default" />
+        <dependency org="org.junit.jupiter" name="junit-jupiter-engine" rev="5.9.3" conf="jars->default" />
+        <dependency org="org.junit.jupiter" name="junit-jupiter-params" rev="5.9.3" conf="jars->default" />
+        <dependency org="ant-contrib" name="ant-contrib" rev="1.0b3" conf="jars->default" />
+    </dependencies>
+</ivy-module>

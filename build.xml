@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="spacemarine-app" default="help" basedir=".">
+<project name="spacemarine-app" default="help" basedir="."
+         xmlns:ivy="antlib:org.apache.ivy.ant"
+         xmlns:ac="antlib:net.sf.antcontrib">
 
     <!-- Load properties file -->
     <property file="build.properties"/>
@@ -9,13 +11,57 @@
         <format property="build.time" pattern="yyyy-MM-dd HH:mm:ss"/>
     </tstamp>
 
-    <taskdef resource="net/sf/antcontrib/antlib.xml">
-        <classpath>
-            <pathelement location="lib/ant-contrib.jar"/>
-        </classpath>
-    </taskdef>
+    <property name="ivy.jar.file" value="lib/ivy.jar"/>
+    <path id="ivy.lib.path">
+        <fileset file="${ivy.jar.file}"/>
+    </path>
 
+    <taskdef resource="org/apache/ivy/ant/antlib.xml"
+             uri="antlib:org.apache.ivy.ant"
+             classpathref="ivy.lib.path"/>
 
+    <property name="lib.dir" value="lib"/>
+    <property name="build.lib.dir" value="${build.dir}/lib"/>
+
+    <target name="init-ant-contrib" depends="resolve">
+        <taskdef resource="net/sf/antcontrib/antlib.xml"
+                 uri="antlib:net.sf.antcontrib">
+            <classpath>
+                <fileset dir="${lib.dir}" includes="ant-contrib*.jar"/>
+            </classpath>
+        </taskdef>
+    </target>
+
+    <!-- Загружаем зависимости -->
+    <target name="resolve" description="Загрузка зависимостей">
+        <echo message="Resolving dependencies with Ivy..."/>
+        <ivy:retrieve pattern="${lib.dir}/[conf]/[artifact]-[revision].[ext]"/>
+
+        <!-- Создаем classpath для компиляции -->
+        <path id="compile.classpath">
+            <fileset dir="${lib.dir}/default">
+                <include name="**/*.jar"/>
+            </fileset>
+        </path>
+
+        <!-- Создаем classpath для тестов -->
+        <path id="test.classpath">
+            <fileset dir="${lib.dir}/default">
+                <include name="**/*.jar"/>
+            </fileset>
+            <fileset dir="${lib.dir}/test">
+                <include name="**/*.jar"/>
+            </fileset>
+            <pathelement location="${classes.dir}"/>
+        </path>
+
+        <!-- Создаем classpath для сборки -->
+        <path id="build.classpath">
+            <fileset dir="${lib.dir}/build">
+                <include name="**/*.jar"/>
+            </fileset>
+        </path>
+    </target>
     <!-- Display project information -->
     <target name="init">
         <echo message="=== SpaceMarine System Build ==="/>
