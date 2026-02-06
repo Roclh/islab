@@ -454,7 +454,7 @@ success.operation=Операция успешно завершена"/>
         <echo message="Package: alt.Roclh"/>
     </target>
 
-    <!-- Team target - build previous revisions from git (simple and reliable) -->
+    <!-- Team target - simple and reliable -->
     <target name="team" depends="build" description="Build previous revisions from git repository">
         <echo message="Building previous revisions from git..."/>
 
@@ -468,28 +468,89 @@ success.operation=Операция успешно завершена"/>
         </exec>
 
         <echo message="Current commit: ${current.commit}"/>
+        <echo message="Getting recent commits..."/>
 
-        <!-- Try to build up to 4 revisions using simple sequential approach -->
-        <echo message="Attempting to build available revisions..."/>
+        <!-- Get the last 4 commit hashes directly -->
+        <exec executable="git" outputproperty="commit1" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=0"/>
+        </exec>
 
-        <!-- Build revision 1 (current) -->
-        <antcall target="team-build-revision">
-            <param name="revision.number" value="1"/>
+        <exec executable="git" outputproperty="commit2" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=1"/>
+        </exec>
+
+        <exec executable="git" outputproperty="commit3" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=2"/>
+        </exec>
+
+        <exec executable="git" outputproperty="commit4" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=3"/>
+        </exec>
+
+        <!-- Clean the commits -->
+        <loadresource property="commit1.clean">
+            <string value="${commit1}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <loadresource property="commit2.clean">
+            <string value="${commit2}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <loadresource property="commit3.clean">
+            <string value="${commit3}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <loadresource property="commit4.clean">
+            <string value="${commit4}"/>
+            <filterchain>
+                <striplinebreaks/>
+                <trim/>
+            </filterchain>
+        </loadresource>
+
+        <!-- Build each commit if it exists -->
+        <antcall target="build-commit">
+            <param name="commit.hash" value="${commit1.clean}"/>
+            <param name="commit.num" value="1"/>
         </antcall>
 
-        <!-- Build revision 2 (previous) -->
-        <antcall target="team-build-revision">
-            <param name="revision.number" value="2"/>
+        <antcall target="build-commit">
+            <param name="commit.hash" value="${commit2.clean}"/>
+            <param name="commit.num" value="2"/>
         </antcall>
 
-        <!-- Build revision 3 (older) -->
-        <antcall target="team-build-revision">
-            <param name="revision.number" value="3"/>
+        <antcall target="build-commit">
+            <param name="commit.hash" value="${commit3.clean}"/>
+            <param name="commit.num" value="3"/>
         </antcall>
 
-        <!-- Build revision 4 (oldest) -->
-        <antcall target="team-build-revision">
-            <param name="revision.number" value="4"/>
+        <antcall target="build-commit">
+            <param name="commit.hash" value="${commit4.clean}"/>
+            <param name="commit.num" value="4"/>
         </antcall>
 
         <!-- Return to original commit -->
@@ -499,107 +560,48 @@ success.operation=Операция успешно завершена"/>
             <arg value="${current.commit}"/>
         </exec>
 
-        <!-- Create ZIP archive with all revisions -->
-        <echo message="Creating ZIP archive with built revisions..."/>
-
-        <!-- Check if any revisions were built -->
+        <!-- Count how many JARs were built -->
         <fileset dir="${build.dir}/revisions" includes="*.jar" id="built.jars"/>
         <property name="jar.count" refid="built.jars"/>
 
+        <!-- Create ZIP if any JARs were built -->
         <condition property="jars.exist">
             <not>
                 <equals arg1="${jar.count}" arg2="0"/>
             </not>
         </condition>
 
-        <antcall target="team-create-zip"/>
-        <antcall target="team-no-zip"/>
-
-        <echo message="Team build process completed."/>
+        <antcall target="create-zip"/>
+        <antcall target="no-jars"/>
     </target>
 
-    <target name="team-create-zip" if="jars.exist">
-        <zip destfile="${dist.dir}/revisions.zip" basedir="${build.dir}/revisions"/>
-        <echo message="ZIP archive created: ${dist.dir}/revisions.zip"/>
-        <echo message="Contains ${jar.count} built revision(s)"/>
-    </target>
-
-    <target name="team-no-zip" unless="jars.exist">
-        <echo message="No revisions were built, skipping ZIP creation."/>
-    </target>
-
-    <!-- Build a specific revision number -->
-    <target name="team-build-revision">
-        <echo message="Attempting to build revision ${revision.number}..."/>
-
-        <!-- Get the commit hash for this revision number -->
-        <exec executable="git" outputproperty="commit.hash.raw" failonerror="false">
-            <arg value="log"/>
-            <arg value="--format=%H"/>
-            <arg value="-n1"/>
-            <arg value="--skip=${revision.number}-1"/>
-        </exec>
-
-        <!-- Clean the hash -->
-        <loadresource property="commit.hash">
-            <string value="${commit.hash.raw}"/>
-            <filterchain>
-                <striplinebreaks/>
-                <trim/>
-            </filterchain>
-        </loadresource>
-
-        <!-- Check if we got a valid hash (not empty and looks like a commit hash) -->
-        <condition property="valid.commit">
-            <and>
-                <isset property="commit.hash"/>
+    <target name="build-commit">
+        <!-- Check if commit hash is valid -->
+        <condition property="skip.build">
+            <or>
+                <equals arg1="${commit.hash}" arg2=""/>
                 <not>
-                    <equals arg1="${commit.hash}" arg2=""/>
+                    <isset property="commit.hash"/>
                 </not>
-                <length string="${commit.hash}" when="gt" length="10"/>
-            </and>
+            </or>
         </condition>
 
-        <!-- Try to build if we have a valid commit -->
-        <antcall target="team-try-build">
-            <param name="build.hash" value="${commit.hash}"/>
-            <param name="build.number" value="${revision.number}"/>
-        </antcall>
+        <antcall target="skip-commit"/>
+        <antcall target="process-commit"/>
     </target>
 
-    <!-- Try to build a specific commit hash -->
-    <target name="team-try-build">
-        <echo message="Trying to build commit: ${build.hash}"/>
-
-        <!-- Backup current build.xml -->
-        <copy file="build.xml" tofile="${build.dir}/build.xml.backup" overwrite="true"/>
-
-        <!-- Try to checkout the commit -->
-        <exec executable="git" failonerror="false" resultproperty="checkout.code">
-            <arg value="checkout"/>
-            <arg value="${build.hash}"/>
-            <arg value="-f"/>
-            <arg value="--quiet"/>
-        </exec>
-
-        <!-- Check if checkout succeeded -->
-        <condition property="checkout.ok">
-            <equals arg1="${checkout.code}" arg2="0"/>
-        </condition>
-
-        <!-- If checkout succeeded, try to build -->
-        <antcall target="team-execute-build"/>
-
-        <!-- Always restore build.xml -->
-        <copy file="${build.dir}/build.xml.backup" tofile="build.xml" overwrite="true"/>
+    <target name="skip-commit" if="skip.build">
+        <echo message="Skipping commit ${commit.num} (no hash)"/>
     </target>
 
-    <target name="team-execute-build" if="checkout.ok">
-        <!-- Get short hash for naming -->
+    <target name="process-commit" unless="skip.build">
+        <echo message="Building commit ${commit.num}: ${commit.hash}"/>
+
+        <!-- Get short hash -->
         <exec executable="git" outputproperty="short.hash.raw" failonerror="false">
             <arg value="rev-parse"/>
             <arg value="--short"/>
-            <arg value="${build.hash}"/>
+            <arg value="${commit.hash}"/>
         </exec>
 
         <loadresource property="short.hash">
@@ -610,32 +612,72 @@ success.operation=Операция успешно завершена"/>
             </filterchain>
         </loadresource>
 
-        <!-- Try to build with Maven -->
-        <echo message="Building revision ${short.hash}..."/>
-        <exec executable="${maven.executable}" failonerror="false" resultproperty="build.code">
+        <!-- Checkout commit -->
+        <exec executable="git" failonerror="false" resultproperty="checkout.result">
+            <arg value="checkout"/>
+            <arg value="${commit.hash}"/>
+            <arg value="-f"/>
+            <arg value="--quiet"/>
+        </exec>
+
+        <condition property="checkout.success">
+            <equals arg1="${checkout.result}" arg2="0"/>
+        </condition>
+
+        <antcall target="build-after-checkout"/>
+        <antcall target="checkout-failed"/>
+    </target>
+
+    <target name="checkout-failed" unless="checkout.success">
+        <echo message="Failed to checkout commit"/>
+    </target>
+
+    <target name="build-after-checkout" if="checkout.success">
+        <!-- Build with Maven -->
+        <exec executable="${maven.executable}" failonerror="false" resultproperty="build.result">
             <arg value="clean"/>
             <arg value="package"/>
             <arg value="-DskipTests"/>
         </exec>
 
-        <!-- Check if build succeeded -->
-        <condition property="build.ok">
-            <equals arg1="${build.code}" arg2="0"/>
+        <condition property="build.success">
+            <equals arg1="${build.result}" arg2="0"/>
         </condition>
 
-        <!-- Copy JAR if build succeeded -->
-        <antcall target="team-copy-jar"/>
+        <antcall target="copy-jar-if-exists"/>
+        <antcall target="build-failed"/>
     </target>
 
-    <target name="team-copy-jar" if="build.ok">
-        <!-- Find and copy any JAR file -->
-        <copy todir="${build.dir}/revisions" flatten="true" failonerror="false">
-            <fileset dir="${dist.dir}">
-                <include name="*.jar"/>
-            </fileset>
-            <mapper type="regexp" from="^(.*)\.jar$$" to="\1-${short.hash}.jar"/>
-        </copy>
-        <echo message="✓ Successfully built revision ${short.hash}"/>
+    <target name="copy-jar-if-exists" if="build.success">
+        <!-- Check if JAR was created -->
+        <available file="${dist.dir}/${project.name}.jar" property="jar.created"/>
+
+        <antcall target="copy-jar"/>
+        <antcall target="no-jar-found"/>
+    </target>
+
+    <target name="copy-jar" if="jar.created">
+        <copy file="${dist.dir}/${project.name}.jar"
+              tofile="${build.dir}/revisions/${project.name}-${short.hash}.jar"
+              failonerror="false"/>
+        <echo message="✓ Built revision ${short.hash}"/>
+    </target>
+
+    <target name="no-jar-found" unless="jar.created">
+        <echo message="No JAR found for ${short.hash}"/>
+    </target>
+
+    <target name="build-failed" unless="build.success">
+        <echo message="✗ Build failed for ${short.hash}"/>
+    </target>
+
+    <target name="create-zip" if="jars.exist">
+        <zip destfile="${dist.dir}/revisions.zip" basedir="${build.dir}/revisions"/>
+        <echo message="Team build completed! ZIP: ${dist.dir}/revisions.zip (${jar.count} revisions)"/>
+    </target>
+
+    <target name="no-jars" unless="jars.exist">
+        <echo message="No revisions were built. Check if you have enough commits in history."/>
     </target>
 
     <!-- Environment target - build and run with alternative Java environments -->
