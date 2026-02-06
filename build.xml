@@ -3,7 +3,6 @@
 
     <!-- Load properties file -->
     <property file="build.properties"/>
-    <property name="ant.version" value="1.10.12"/>
 
     <!-- Set timestamp -->
     <tstamp>
@@ -455,7 +454,7 @@ success.operation=Операция успешно завершена"/>
         <echo message="Package: alt.Roclh"/>
     </target>
 
-    <!-- Team target - build previous revisions from git -->
+    <!-- Team target - build previous revisions from git (simple and reliable) -->
     <target name="team" depends="build" description="Build previous revisions from git repository">
         <echo message="Building previous revisions from git..."/>
 
@@ -470,42 +469,27 @@ success.operation=Операция успешно завершена"/>
 
         <echo message="Current commit: ${current.commit}"/>
 
-        <!-- Get available commits (up to 4) -->
-        <exec executable="git" outputproperty="git.revisions" failonerror="true">
-            <arg value="log"/>
-            <arg value="--format=%H"/>
-            <arg value="-n10"/>
-        </exec>
+        <!-- Try to build up to 4 revisions using simple sequential approach -->
+        <echo message="Attempting to build available revisions..."/>
 
-        <!-- Write revisions to file -->
-        <echo file="${build.dir}/revisions-list.txt" message="${git.revisions}"/>
+        <!-- Build revision 1 (current) -->
+        <antcall target="team-build-revision">
+            <param name="revision.number" value="1"/>
+        </antcall>
 
-        <!-- Count lines in file to know how many revisions we have -->
-        <resourcecount property="revision.count">
-            <fileset file="${build.dir}/revisions-list.txt"/>
-        </resourcecount>
+        <!-- Build revision 2 (previous) -->
+        <antcall target="team-build-revision">
+            <param name="revision.number" value="2"/>
+        </antcall>
 
-        <echo message="Found ${revision.count} revisions in history"/>
+        <!-- Build revision 3 (older) -->
+        <antcall target="team-build-revision">
+            <param name="revision.number" value="3"/>
+        </antcall>
 
-        <!-- Determine how many revisions to actually build (max 4) -->
-        <condition property="revisions.to.build" value="${revision.count}">
-            <or>
-                <equals arg1="${revision.count}" arg2="0"/>
-                <equals arg1="${revision.count}" arg2="1"/>
-                <equals arg1="${revision.count}" arg2="2"/>
-                <equals arg1="${revision.count}" arg2="3"/>
-            </or>
-        </condition>
-        <condition property="revisions.to.build" value="4">
-            <or>
-                <equals arg1="${revision.count}" arg2="4"/>
-                <isset property="revision.count.greater"/>
-            </or>
-        </condition>
-
-        <!-- Process available revisions -->
-        <antcall target="team-process-revisions">
-            <param name="max.revisions" value="${revisions.to.build}"/>
+        <!-- Build revision 4 (oldest) -->
+        <antcall target="team-build-revision">
+            <param name="revision.number" value="4"/>
         </antcall>
 
         <!-- Return to original commit -->
@@ -517,158 +501,105 @@ success.operation=Операция успешно завершена"/>
 
         <!-- Create ZIP archive with all revisions -->
         <echo message="Creating ZIP archive with built revisions..."/>
+
+        <!-- Check if any revisions were built -->
+        <fileset dir="${build.dir}/revisions" includes="*.jar" id="built.jars"/>
+        <property name="jar.count" refid="built.jars"/>
+
+        <condition property="jars.exist">
+            <not>
+                <equals arg1="${jar.count}" arg2="0"/>
+            </not>
+        </condition>
+
+        <antcall target="team-create-zip"/>
+        <antcall target="team-no-zip"/>
+
+        <echo message="Team build process completed."/>
+    </target>
+
+    <target name="team-create-zip" if="jars.exist">
         <zip destfile="${dist.dir}/revisions.zip" basedir="${build.dir}/revisions"/>
-
-        <!-- Cleanup -->
-        <delete file="${build.dir}/revisions-list.txt"/>
-
-        <echo message="Team build completed successfully!"/>
-        <echo message="ZIP archive: ${dist.dir}/revisions.zip"/>
-        <echo message="Built ${revisions.to.build} revision(s)"/>
+        <echo message="ZIP archive created: ${dist.dir}/revisions.zip"/>
+        <echo message="Contains ${jar.count} built revision(s)"/>
     </target>
 
-    <!-- Process revisions -->
-    <target name="team-process-revisions">
-        <!-- Process each revision individually -->
-        <antcall target="team-build-revision">
-            <param name="revision.index" value="0"/>
-            <param name="max.revisions" value="${max.revisions}"/>
-        </antcall>
-        <antcall target="team-build-revision">
-            <param name="revision.index" value="1"/>
-            <param name="max.revisions" value="${max.revisions}"/>
-        </antcall>
-        <antcall target="team-build-revision">
-            <param name="revision.index" value="2"/>
-            <param name="max.revisions" value="${max.revisions}"/>
-        </antcall>
-        <antcall target="team-build-revision">
-            <param name="revision.index" value="3"/>
-            <param name="max.revisions" value="${max.revisions}"/>
-        </antcall>
+    <target name="team-no-zip" unless="jars.exist">
+        <echo message="No revisions were built, skipping ZIP creation."/>
     </target>
 
-    <!-- Build a single revision -->
+    <!-- Build a specific revision number -->
     <target name="team-build-revision">
-        <!-- Check if we should process this index -->
-        <condition property="skip.this.revision">
-            <or>
-                <not>
-                    <isset property="revision.index"/>
-                </not>
-                <not>
-                    <isset property="max.revisions"/>
-                </not>
-                <greaterthan>
-                    <arg value="${revision.index}"/>
-                    <arg value="${max.revisions}"/>
-                </greaterthan>
-            </or>
-        </condition>
+        <echo message="Attempting to build revision ${revision.number}..."/>
 
-        <antcall target="team-skip-revision"/>
-        <antcall target="team-process-single-revision"/>
-    </target>
-
-    <target name="team-skip-revision" if="skip.this.revision">
-        <echo message="Skipping revision index ${revision.index} (out of range)"/>
-    </target>
-
-    <target name="team-process-single-revision" unless="skip.this.revision">
-        <!-- Read specific line from revisions file -->
-        <exec executable="head" osfamily="unix" outputproperty="revision.hash.raw" failonerror="false">
-            <arg value="-n"/>
-            <arg value="$(( ${revision.index} + 1 ))"/>
-            <arg value="${build.dir}/revisions-list.txt"/>
-            <arg value="| tail -1"/>
+        <!-- Get the commit hash for this revision number -->
+        <exec executable="git" outputproperty="commit.hash.raw" failonerror="false">
+            <arg value="log"/>
+            <arg value="--format=%H"/>
+            <arg value="-n1"/>
+            <arg value="--skip=${revision.number}-1"/>
         </exec>
-
-        <!-- For Windows, use a different approach -->
-        <exec executable="cmd" osfamily="windows" outputproperty="revision.hash.windows" failonerror="false">
-            <arg value="/c"/>
-            <arg value="powershell -Command &quot;(Get-Content '${build.dir}/revisions-list.txt' | Select-Object -Index ${revision.index}).Trim()&quot;"/>
-        </exec>
-
-        <!-- Determine which hash to use -->
-        <condition property="revision.hash" value="${revision.hash.windows}" else="${revision.hash.raw}">
-            <and>
-                <isset property="revision.hash.windows"/>
-                <not>
-                    <equals arg1="${revision.hash.windows}" arg2=""/>
-                </not>
-            </and>
-        </condition>
 
         <!-- Clean the hash -->
-        <loadresource property="clean.hash">
-            <string value="${revision.hash}"/>
+        <loadresource property="commit.hash">
+            <string value="${commit.hash.raw}"/>
             <filterchain>
                 <striplinebreaks/>
                 <trim/>
             </filterchain>
         </loadresource>
 
-        <!-- Check if we got a valid hash -->
-        <condition property="valid.hash">
+        <!-- Check if we got a valid hash (not empty and looks like a commit hash) -->
+        <condition property="valid.commit">
             <and>
-                <isset property="clean.hash"/>
+                <isset property="commit.hash"/>
                 <not>
-                    <equals arg1="${clean.hash}" arg2=""/>
+                    <equals arg1="${commit.hash}" arg2=""/>
                 </not>
-                <length string="${clean.hash}" when="gt" length="10"/>
+                <length string="${commit.hash}" when="gt" length="10"/>
             </and>
         </condition>
 
-        <antcall target="team-execute-build">
-            <param name="revision.number" value="${revision.index}"/>
-            <param name="revision.hash" value="${clean.hash}"/>
-        </antcall>
-        <antcall target="team-invalid-hash">
-            <param name="revision.number" value="${revision.index}"/>
+        <!-- Try to build if we have a valid commit -->
+        <antcall target="team-try-build">
+            <param name="build.hash" value="${commit.hash}"/>
+            <param name="build.number" value="${revision.number}"/>
         </antcall>
     </target>
 
-    <target name="team-invalid-hash">
-        <echo message="Invalid hash for revision ${revision.number}, skipping"/>
-    </target>
+    <!-- Try to build a specific commit hash -->
+    <target name="team-try-build">
+        <echo message="Trying to build commit: ${build.hash}"/>
 
-    <target name="team-execute-build" if="valid.hash">
-        <echo message="Building revision ${revision.number}: ${revision.hash}"/>
-
-        <!-- First, backup current build.xml to restore later -->
+        <!-- Backup current build.xml -->
         <copy file="build.xml" tofile="${build.dir}/build.xml.backup" overwrite="true"/>
 
-        <!-- Checkout the revision -->
-        <exec executable="git" failonerror="false" resultproperty="checkout.result">
+        <!-- Try to checkout the commit -->
+        <exec executable="git" failonerror="false" resultproperty="checkout.code">
             <arg value="checkout"/>
-            <arg value="${revision.hash}"/>
+            <arg value="${build.hash}"/>
             <arg value="-f"/>
             <arg value="--quiet"/>
         </exec>
 
-        <condition property="checkout.success">
-            <equals arg1="${checkout.result}" arg2="0"/>
+        <!-- Check if checkout succeeded -->
+        <condition property="checkout.ok">
+            <equals arg1="${checkout.code}" arg2="0"/>
         </condition>
 
-        <antcall target="team-build-at-revision"/>
-        <antcall target="team-checkout-failed"/>
+        <!-- If checkout succeeded, try to build -->
+        <antcall target="team-execute-build"/>
 
-        <!-- Restore original build.xml immediately -->
+        <!-- Always restore build.xml -->
         <copy file="${build.dir}/build.xml.backup" tofile="build.xml" overwrite="true"/>
     </target>
 
-    <target name="team-checkout-failed" unless="checkout.success">
-        <echo message="Failed to checkout revision ${revision.number}"/>
-        <!-- Restore build.xml -->
-        <copy file="${build.dir}/build.xml.backup" tofile="build.xml" overwrite="true"/>
-    </target>
-
-    <target name="team-build-at-revision" if="checkout.success">
+    <target name="team-execute-build" if="checkout.ok">
         <!-- Get short hash for naming -->
         <exec executable="git" outputproperty="short.hash.raw" failonerror="false">
             <arg value="rev-parse"/>
             <arg value="--short"/>
-            <arg value="${revision.hash}"/>
+            <arg value="${build.hash}"/>
         </exec>
 
         <loadresource property="short.hash">
@@ -680,55 +611,31 @@ success.operation=Операция успешно завершена"/>
         </loadresource>
 
         <!-- Try to build with Maven -->
-        <exec executable="${maven.executable}" failonerror="false" resultproperty="maven.build.result">
+        <echo message="Building revision ${short.hash}..."/>
+        <exec executable="${maven.executable}" failonerror="false" resultproperty="build.code">
             <arg value="clean"/>
             <arg value="package"/>
             <arg value="-DskipTests"/>
         </exec>
 
-        <condition property="maven.build.success">
-            <equals arg1="${maven.build.result}" arg2="0"/>
+        <!-- Check if build succeeded -->
+        <condition property="build.ok">
+            <equals arg1="${build.code}" arg2="0"/>
         </condition>
 
+        <!-- Copy JAR if build succeeded -->
         <antcall target="team-copy-jar"/>
-        <antcall target="team-build-failed"/>
     </target>
 
-    <target name="team-copy-jar" if="maven.build.success">
-        <!-- Look for the JAR file -->
-        <fileset dir="${dist.dir}" includes="*.jar" id="jar.files"/>
-        <property name="jar.file.count" refid="jar.files"/>
-
-        <condition property="jar.found">
-            <and>
-                <isset property="jar.file.count"/>
-                <not>
-                    <equals arg1="${jar.file.count}" arg2="0"/>
-                </not>
-            </and>
-        </condition>
-
-        <antcall target="team-copy-specific-jar"/>
-        <antcall target="team-jar-not-found"/>
-    </target>
-
-    <target name="team-copy-specific-jar" if="jar.found">
-        <!-- Copy the first JAR found -->
+    <target name="team-copy-jar" if="build.ok">
+        <!-- Find and copy any JAR file -->
         <copy todir="${build.dir}/revisions" flatten="true" failonerror="false">
             <fileset dir="${dist.dir}">
                 <include name="*.jar"/>
             </fileset>
             <mapper type="regexp" from="^(.*)\.jar$$" to="\1-${short.hash}.jar"/>
         </copy>
-        <echo message="✓ Revision ${short.hash} built successfully"/>
-    </target>
-
-    <target name="team-jar-not-found" unless="jar.found">
-        <echo message="✗ No JAR file found for revision ${short.hash}"/>
-    </target>
-
-    <target name="team-build-failed" unless="maven.build.success">
-        <echo message="✗ Maven build failed for revision ${short.hash}"/>
+        <echo message="✓ Successfully built revision ${short.hash}"/>
     </target>
 
     <!-- Environment target - build and run with alternative Java environments -->
