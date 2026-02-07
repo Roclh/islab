@@ -1,387 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="spacemarine-system" basedir="." default="help">
+<project name="spacemarine-system" basedir="." default="help" xmlns:ivy="antlib:org.apache.ivy.ant">
 
     <!-- Load properties file -->
     <property file="build.properties"/>
 
-    <taskdef resource="net/sf/antcontrib/antcontrib.properties">
+    <path id="classpath.source">
+        <fileset dir="./lib" includes="**/*.jar"/>
+    </path>
+
+    <taskdef resource="net/sf/antcontrib/antlib.xml">
         <classpath>
-            <pathelement location="${ant.contrib.jar}"/>
+            <pathelement location="lib/ant-contrib.jar"/>
         </classpath>
     </taskdef>
 
-    <!-- Check if Maven is available -->
-    <target name="check-maven">
-        <condition property="maven.available">
-            <and>
-                <available file="${maven.bin}"/>
-                <or>
-                    <available file="${maven.home}"/>
-                    <isset property="env.M2_HOME"/>
-                </or>
-            </and>
-        </condition>
-        <fail unless="maven.available"
-              message="Maven is not available. Please set M2_HOME environment variable."/>
+    <target name="resolve" description="resolve dependencies with ivy">
+        <echo message="Resolving dependencies..."/>
+        <ivy:resolve/>
+
+        <echo message="Generating dependency report..."/>
+        <ivy:report todir="${ivy.report.dir}" graph="false"/>
+
+        <echo message="Retrieving dependencies to lib directory..."/>
+        <ivy:retrieve pattern="${lib.dir}/[conf]/[artifact]-[revision].[ext]" sync="true"/>
+
+        <echo message="Dependencies resolved successfully."/>
+        <echo message="Report available at: ${ivy.report.dir}"/>
     </target>
-
-    <target name="clean" description="Remove compiled classes and temporary files">
-        <echo message="Cleaning build directories..."/>
-        <delete dir="${build.dir}"/>
-        <delete dir="${dist.dir}"/>
-        <echo message="Clean completed."/>
+    <target name="cleanLib" description="Remove lib directory">
+        <delete dir="${lib}"/>
     </target>
-
-    <!-- Compile target - compiles source code using Maven -->
-    <target name="compile" depends="check-maven, init" description="Compile source code">
-        <echo message="Compiling source code using Maven..."/>
-        <exec executable="${maven.bin}" failonerror="true">
-            <arg value="compile"/>
-        </exec>
-        <echo message="Compilation completed."/>
-    </target>
-
-    <!-- Build target - compiles and packages into JAR -->
-    <target name="build" depends="compile" description="Compile and package into JAR">
-        <echo message="Building JAR file using Maven..."/>
-        <exec executable="${maven.bin}" failonerror="true">
-            <arg value="package"/>
-            <arg value="-DskipTests"/>
-        </exec>
-
-        <!-- Copy the JAR file to dist directory -->
-        <copy file="${build.dir}/${project.name}.jar"
-              tofile="${jar.file}"
-              overwrite="true"/>
-
-        <echo message="JAR file created: ${jar.file}"/>
-    </target>
-
-    <!-- Test target - runs JUnit tests -->
-    <target name="test" depends="build" description="Run JUnit tests">
-        <echo message="Running tests using Maven..."/>
-        <exec executable="${maven.bin}" failonerror="false" resultproperty="maven.test.result">
-            <arg value="test"/>
-            <arg value="-Dspring.profiles.active=test"/>
-        </exec>
-
-        <!-- Generate test report -->
-        <junitreport todir="${reports.dir}">
-            <fileset dir="${build.dir}/surefire-reports">
-                <include name="TEST-*.xml"/>
-            </fileset>
-            <report format="frames" todir="${reports.dir}"/>
-        </junitreport>
-
-        <condition property="tests.failed">
-            <not>
-                <equals arg1="${maven.test.result}" arg2="0"/>
-            </not>
-        </condition>
-
-        <fail if="tests.failed" message="Some tests failed. Check reports in ${reports.dir}"/>
-        <echo message="Tests completed successfully. Reports available in ${reports.dir}"/>
-    </target>
-
-    <!-- XML validation target - validates all XML files -->
-    <target name="xml" description="Validate all XML files in project">
-        <echo message="Validating XML files..."/>
-
-        <!-- Validate pom.xml -->
-        <xmlvalidate file="pom.xml" failonerror="true"/>
-
-        <!-- Validate application.yaml -->
-        <xmlvalidate file="${resources.dir}/application.yaml" failonerror="false">
-            <dtd publicId="-//YAML//DTD YAML 1.2//EN" location=""/>
-        </xmlvalidate>
-
-        <!-- Validate other XML files if any -->
-        <fileset id="xml.files" dir="." includes="**/*.xml" excludes="build.xml, **/target/**"/>
-        <apply executable="xmllint" failonerror="false" parallel="false">
-            <arg value="--noout"/>
-            <srcfile/>
-            <fileset refid="xml.files"/>
-        </apply>
-
-        <echo message="XML validation completed."/>
-    </target>
-
-    <!-- Documentation target - generates javadoc and updates MANIFEST.MF -->
-    <target name="doc" depends="build" description="Generate javadoc and update MANIFEST.MF">
-        <echo message="Generating javadoc..."/>
-
-        <!-- Generate javadoc using Maven -->
-        <exec executable="${maven.bin}">
-            <arg value="javadoc:javadoc"/>
-        </exec>
-
-        <!-- Copy javadoc to separate directory -->
-        <copy todir="${javadoc.dir}">
-            <fileset dir="${build.dir}/site/apidocs"/>
-        </copy>
-
-        <echo message="Updating MANIFEST.MF with checksums..."/>
-
-        <!-- Create temporary directory for MANIFEST.MF -->
-        <tempfile property="temp.manifest.dir" prefix="manifest" destdir="${build.dir}"/>
-        <mkdir dir="${temp.manifest.dir}"/>
-
-        <!-- Create MANIFEST.MF with version and main class -->
-        <manifest file="${temp.manifest.dir}/MANIFEST.MF">
-            <attribute name="Manifest-Version" value="1.0"/>
-            <attribute name="Created-By" value="Apache Ant"/>
-            <attribute name="Built-By" value="${user.name}"/>
-            <attribute name="Build-Jdk" value="${java.version}"/>
-            <attribute name="Main-Class" value="${main.class}"/>
-            <attribute name="Implementation-Title" value="${project.name}"/>
-            <attribute name="Implementation-Version" value="${project.version}"/>
-            <attribute name="Implementation-Vendor" value="org.Roclh"/>
-        </manifest>
-
-        <!-- Calculate checksums for all source files -->
-        <checksum algorithm="MD5" file="${jar.file}" property="md5sum"/>
-        <checksum algorithm="SHA-1" file="${jar.file}" property="sha1sum"/>
-
-        <!-- Update manifest with checksums -->
-        <manifest file="${temp.manifest.dir}/MANIFEST.MF" mode="update">
-            <attribute name="MD5-Checksum" value="${md5sum}"/>
-            <attribute name="SHA1-Checksum" value="${sha1sum}"/>
-        </manifest>
-
-        <!-- Update JAR with new MANIFEST.MF -->
-        <jar destfile="${jar.file}" update="true">
-            <metainf dir="${temp.manifest.dir}"/>
-        </jar>
-
-        <!-- Cleanup temporary files -->
-        <delete dir="${temp.manifest.dir}"/>
-
-        <echo message="Documentation generated in ${javadoc.dir}"/>
-        <echo message="MANIFEST.MF updated with checksums."/>
-    </target>
-
-    <!-- Native2ascii target - converts localization files -->
-    <target name="native2ascii" description="Convert localization files to ASCII">
-        <echo message="Running native2ascii for localization files..."/>
-
-        <!-- Create destination directory -->
-        <mkdir dir="${n2a.dest.dir}"/>
-
-        <!-- First, create sample properties files if they don't exist -->
-        <available file="${resources.dir}/messages.properties" property="props.exist"/>
-
-        <if>
-            <not>
-                <isset property="props.exist"/>
-            </not>
-            <then>
-                <echo message="Creating sample properties files..."/>
-
-                <!-- Create sample English properties -->
-                <echo file="${resources.dir}/messages.properties" encoding="UTF-8">
-                    # Sample English messages
-                    app.title=Space Marine Management System
-                    app.welcome=Welcome to Space Marine System
-                    error.notfound=Resource not found
-                    error.server=Server error occurred
-                    success.save=Data saved successfully
-                    button.submit=Submit
-                    button.cancel=Cancel
-                    label.name=Name
-                    label.health=Health
-                    label.category=Category
-                </echo>
-
-                <!-- Create sample Russian properties -->
-                <echo file="${resources.dir}/messages_ru.properties" encoding="UTF-8">
-                    # Russian messages
-                    app.title=\u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u041a\u043e\u0441\u043c\u0438\u0447\u0435\u0441\u043a\u0438\u043c\u0438 \u0414\u0435\u0441\u0430\u043d\u0442\u043d\u0438\u043a\u0430\u043c\u0438
-                    app.welcome=\u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0443 \u041a\u043e\u0441\u043c\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0414\u0435\u0441\u0430\u043d\u0442\u0430
-                    error.notfound=\u0420\u0435\u0441\u0443\u0440\u0441 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d
-                    error.server=\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430
-                </echo>
-            </then>
-        </if>
-
-        <!-- Copy all properties files to temp directory -->
-        <copy todir="${build.dir}/n2a-temp" includeEmptyDirs="false">
-            <fileset dir="${resources.dir}" includes="**/*.properties"/>
-        </copy>
-
-        <!-- Convert from native encoding to ASCII -->
-        <native2ascii encoding="${encoding}"
-                      src="${build.dir}/n2a-temp"
-                      dest="${n2a.dest.dir}"
-                      includes="**/*.properties"/>
-
-        <!-- Show the converted files -->
-        <echo message="Converted files in ${n2a.dest.dir}: "/>
-        <fileset id="converted.files" dir="${n2a.dest.dir}" includes="**/*.properties"/>
-        <pathconvert pathsep="${line.separator}  - " property="converted.list" refid="converted.files">
-            <map from="${n2a.dest.dir}${file.separator}" to=""/>
-        </pathconvert>
-        <echo message="  - ${converted.list}"/>
-
-        <!-- Cleanup temp directory -->
-        <delete dir="${build.dir}/n2a-temp"/>
-
-        <echo message="Native2ascii conversion completed."/>
-    </target>
-
-    <!-- Music target - plays music after build -->
-    <target name="music" description="Play music after build completion">
-        <echo message="Playing build completion music..."/>
-
-        <!-- Check if music file exists -->
-        <available file="${music.file}" property="music.exists"/>
-
-        <if>
-            <isset property="music.exists"/>
-            <then>
-                <!-- Try to play with Windows Media Player -->
-                <echo message="Playing ${music.file}..."/>
-                <exec executable="${music.player}" spawn="true">
-                    <arg line="${music.player.args} '${music.file}'"/>
-                </exec>
-                <echo message="Music playback started."/>
-            </then>
-            <else>
-                <!-- Create a simple WAV file if none exists -->
-                <echo message="Music file not found. Creating sample tone..."/>
-
-                <!-- Create a simple beep using PowerShell -->
-                <exec executable="powershell" spawn="true">
-                    <arg line="-Command &quot;[console]::beep(1000,500); [console]::beep(800,300); [console]::beep(1200,700)&quot;"/>
-                </exec>
-
-                <echo message="Played system beep tones."/>
-            </else>
-        </if>
-    </target>
-
-    <!-- Alternative version target - simplified -->
-    <target name="alt" depends="build" description="Create alternative version with changed package only">
-        <echo message="Creating alternative version of the application..."/>
-
-        <!-- Clean previous alternative version -->
-        <delete dir="${alt.src.dir}" quiet="true"/>
-        <delete dir="${alt.dist.dir}" quiet="true"/>
-
-        <!-- Create directories for alternative version -->
-        <mkdir dir="${alt.src.dir}"/>
-
-        <!-- Step 1: Copy all source files -->
-        <echo message="Copying source files..."/>
-        <copy todir="${alt.src.dir}" preservelastmodified="true">
-            <fileset dir=".">
-                <include name="src/**"/>
-                <include name="pom.xml"/>
-                <include name="*.yml"/>
-                <include name="*.yaml"/>
-                <include name="*.xml" if="file::exists(${basedir}/ehcache.xml)"/>
-                <exclude name="target/**"/>
-                <exclude name="**/.git/**"/>
-                <exclude name="**/.idea/**"/>
-            </fileset>
-        </copy>
-
-        <!-- Step 2: Create alternative pom.xml with alt package -->
-        <echo message="Creating alternative pom.xml..."/>
-
-        <!-- Replace groupId from org.Roclh to alt.Roclh -->
-        <replaceregexp match="&lt;groupId&gt;org\.Roclh&lt;/groupId&gt;"
-                       replace="&lt;groupId&gt;alt.Roclh&lt;/groupId&gt;"
-                       flags="g" file="${alt.src.dir}/pom.xml"/>
-
-        <!-- Replace artifactId to indicate alternative version -->
-        <replaceregexp match="&lt;artifactId&gt;islab1&lt;/artifactId&gt;"
-                       replace="&lt;artifactId&gt;islab1-alt&lt;/artifactId&gt;"
-                       flags="g" file="${alt.src.dir}/pom.xml"/>
-
-        <!-- Step 3: Replace package names in all Java files -->
-        <echo message="Replacing package and import declarations from org.Roclh to alt.Roclh..."/>
-
-        <!-- Replace package declarations -->
-        <replaceregexp match="package\s+org\.Roclh"
-                       replace="package alt.Roclh"
-                       flags="g">
-            <fileset dir="${alt.src.dir}">
-                <include name="**/*.java"/>
-            </fileset>
-        </replaceregexp>
-
-        <!-- Replace import statements -->
-        <replaceregexp match="import\s+org\.Roclh"
-                       replace="import alt.Roclh"
-                       flags="g">
-            <fileset dir="${alt.src.dir}">
-                <include name="**/*.java"/>
-            </fileset>
-        </replaceregexp>
-
-        <!-- Also fix any fully qualified names in code -->
-        <replaceregexp match="org\.Roclh"
-                       replace="alt.Roclh"
-                       flags="g">
-            <fileset dir="${alt.src.dir}">
-                <include name="**/*.java"/>
-            </fileset>
-        </replaceregexp>
-
-        <!-- Step 4: Move directory structure from org/Roclh to alt/Roclh -->
-        <echo message="Moving directory structure from org/Roclh to alt/Roclh..."/>
-
-        <!-- Move Java source directories -->
-        <move todir="${alt.src.dir}/src/main/java/alt/Roclh">
-            <fileset dir="${alt.src.dir}/src/main/java/org/Roclh"/>
-        </move>
-
-        <!-- Remove empty org directory -->
-        <delete dir="${alt.src.dir}/src/main/java/org" quiet="true"/>
-
-        <!-- Step 5: Build alternative version using Maven -->
-        <echo message="Building alternative version using Maven..."/>
-
-        <!-- Run Maven in alternative directory -->
-        <exec executable="${maven.bin}" dir="${alt.src.dir}" failonerror="true">
-            <arg value="clean"/>
-            <arg value="package"/>
-            <arg value="-DskipTests"/>
-        </exec>
-
-        <!-- Step 6: Copy the built JAR to our dist directory -->
-        <mkdir dir="${alt.dist.dir}"/>
-        <copy file="${alt.src.dir}/target/spacemarine-app.jar"
-              tofile="${alt.dist.dir}/${alt.jar.name}"
-              failonerror="true"/>
-
-        <!-- Step 7: Simple success message -->
-        <echo message=""/>
-        <echo message="Alternative version created successfully!"/>
-        <echo message="JAR location: ${alt.dist.dir}/${alt.jar.name}"/>
-        <echo message="Main class: alt.Roclh.SpaceMarineApplication"/>
-        <echo message="Package: alt.Roclh"/>
-    </target>
-
-    <!-- Help target - shows available targets -->
-    <target name="help" description="Show help information">
-        <echo message="SpaceMarine System Build Script"/>
-        <echo message="================================="/>
-        <echo message="Available targets:"/>
-        <echo message=""/>
-        <echo message="  clean   - Remove compiled classes and temporary files"/>
-        <echo message="  compile - Compile source code"/>
-        <echo message="  build   - Compile and package into JAR"/>
-        <echo message="  test    - Run JUnit tests"/>
-        <echo message="  xml     - Validate all XML files"/>
-        <echo message="  doc     - Generate javadoc and update MANIFEST.MF"/>
-        <echo message="  help    - Show this help message"/>
-        <echo message=""/>
-        <echo message="Default target: help"/>
-        <echo message=""/>
-        <echo message="Properties file: build.properties"/>
-        <echo message="Main class: ${main.class}"/>
-        <echo message="Project version: ${project.version}"/>
+    <target name="clean-allLib" depends="cleanLib" description="clean ivy cache">
+        <ivy:cleancache/>
     </target>
 
     <!-- Initialize build directories -->
@@ -391,9 +41,682 @@
         <mkdir dir="${classes.dir}"/>
         <mkdir dir="${test.classes.dir}"/>
         <mkdir dir="${dist.dir}"/>
-        <mkdir dir="${lib.dir}"/>
-        <mkdir dir="${reports.dir}"/>
         <mkdir dir="${reports.dir}"/>
         <mkdir dir="${javadoc.dir}"/>
+    </target>
+
+    <target name="clean" description="Remove compiled classes and temporary files">
+        <echo message="Cleaning build directories..."/>
+        <delete dir="${build.dir}"/>
+        <echo message="Clean completed."/>
+    </target>
+
+    <!-- Compile target - compiles source code using Ivy dependencies -->
+    <target name="compile" depends="resolve, init" description="Compile source code">
+        <echo message="Compiling source code with Ivy dependencies..."/>
+
+        <!-- Create classpath from Ivy dependencies -->
+        <path id="compile.classpath">
+            <fileset dir="${lib.dir}/compile" includes="**/*.jar"/>
+            <fileset dir="${lib.dir}/provided" includes="**/*.jar"/>
+        </path>
+
+        <!-- Compile main source code -->
+        <javac srcdir="${src.dir}"
+               destdir="${classes.dir}"
+               classpathref="compile.classpath"
+               includeantruntime="false"
+               debug="true"
+               deprecation="true"
+               source="${env.java.version}"
+               target="${env.java.version}"
+               encoding="UTF-8">
+            <compilerarg line="${compiler.args}"/>
+        </javac>
+
+        <!-- Copy resources -->
+        <copy todir="${classes.dir}">
+            <fileset dir="${resources.dir}" excludes="**/*.java"/>
+        </copy>
+
+        <echo message="Compilation completed."/>
+    </target>
+
+    <!-- Build target - compiles and packages into JAR -->
+    <target name="build" depends="compile" description="Compile and package into JAR">
+        <echo message="Building JAR file..."/>
+
+        <!-- Create runtime classpath for manifest -->
+        <path id="runtime.classpath">
+            <fileset dir="${lib.dir}/runtime" includes="**/*.jar"/>
+        </path>
+
+        <!-- Convert classpath to manifest format -->
+        <pathconvert property="manifest.classpath" pathsep=" ">
+            <path refid="runtime.classpath"/>
+            <chainedmapper>
+                <flattenmapper/>
+                <globmapper from="*" to="lib/*"/>
+            </chainedmapper>
+        </pathconvert>
+
+        <!-- Create JAR with dependencies in lib/ directory -->
+        <mkdir dir="${dist.dir}/lib"/>
+        <copy todir="${dist.dir}/lib" flatten="true">
+            <fileset dir="${lib.dir}/runtime" includes="**/*.jar"/>
+        </copy>
+
+        <!-- Create MANIFEST.MF -->
+        <manifest file="${dist.dir}/MANIFEST.MF">
+            <attribute name="Manifest-Version" value="1.0"/>
+            <attribute name="Created-By" value="Apache Ant with Ivy"/>
+            <attribute name="Main-Class" value="${main.class}"/>
+            <attribute name="Class-Path" value="${manifest.classpath}"/>
+            <attribute name="Implementation-Title" value="${project.name}"/>
+            <attribute name="Implementation-Version" value="${project.version}"/>
+        </manifest>
+
+        <!-- Build JAR -->
+        <jar destfile="${jar.file}"
+             basedir="${classes.dir}"
+             manifest="${dist.dir}/MANIFEST.MF"/>
+
+        <echo message="JAR file created: ${jar.file}"/>
+
+        <!-- Play music after successful build -->
+        <antcall target="music"/>
+    </target>
+
+    <!-- Test target - compiles and runs JUnit 5 tests -->
+    <target name="test" depends="compile" description="Run JUnit 5 tests">
+        <echo message="Compiling and running JUnit 5 tests..."/>
+
+        <!-- Create test classpath -->
+        <path id="test.classpath">
+            <path refid="compile.classpath"/>
+            <pathelement location="${classes.dir}"/>
+            <fileset dir="${lib.dir}/test" includes="**/*.jar"/>
+        </path>
+
+        <!-- Compile test sources -->
+        <javac srcdir="${test.src.dir}"
+               destdir="${test.classes.dir}"
+               classpathref="test.classpath"
+               includeantruntime="false"
+               debug="true"
+               source="${env.java.version}"
+               target="${env.java.version}"
+               encoding="UTF-8">
+            <compilerarg line="${compiler.args}"/>
+        </javac>
+
+        <!-- Copy test resources -->
+        <copy todir="${test.classes.dir}">
+            <fileset dir="${test.resources.dir}" excludes="**/*.java"/>
+        </copy>
+
+        <!-- Run JUnit 5 tests using junitlauncher (requires Ant 1.10.0+) -->
+        <mkdir dir="${reports.dir}/junit"/>
+
+        <echo message="Running JUnit 5 tests with junitlauncher..."/>
+
+        <junitlauncher haltOnFailure="false" printSummary="true">
+            <classpath>
+                <path refid="test.classpath"/>
+                <pathelement location="${test.classes.dir}"/>
+            </classpath>
+
+            <!-- Configuration for JUnit Jupiter tests -->
+            <testclasses outputdir="${reports.dir}/junit">
+                <fileset dir="${test.classes.dir}">
+                    <include name="**/*Test.class"/>
+                    <include name="**/Test*.class"/>
+                    <exclude name="**/*Abstract*.class"/>
+                </fileset>
+
+                <listener type="legacy-xml" sendSysOut="true" sendSysErr="true"/>
+                <listener type="legacy-plain" sendSysOut="true" sendSysErr="true"/>
+            </testclasses>
+        </junitlauncher>
+
+        <!-- Generate test report -->
+        <junitreport todir="${reports.dir}">
+            <fileset dir="${reports.dir}/junit">
+                <include name="TEST-*.xml"/>
+            </fileset>
+            <report format="frames" todir="${reports.dir}/junit/html"/>
+        </junitreport>
+
+        <echo message="JUnit 5 tests completed. Report available at: ${reports.dir}/junit/html/index.html"/>
+    </target>
+
+    <!-- XML validation target -->
+    <target name="xml" description="Validate all XML files in project">
+        <echo message="Validating XML files..."/>
+
+        <xmlvalidate file="pom.xml" failonerror="false"/>
+        <xmlvalidate file="ivy.xml" failonerror="false"/>
+        <xmlvalidate file="ivysettings.xml" failonerror="false"/>
+
+        <echo message="XML validation completed."/>
+    </target>
+
+    <!-- Documentation target -->
+    <target name="doc" depends="compile" description="Generate javadoc and update MANIFEST.MF">
+        <echo message="Generating javadoc..."/>
+
+        <!-- Create javadoc -->
+        <javadoc destdir="${javadoc.dir}"
+                 source="${env.java.version}"
+                 encoding="UTF-8"
+                 charset="UTF-8"
+                 docencoding="UTF-8">
+            <classpath refid="compile.classpath"/>
+            <fileset dir="${src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+            <doctitle><![CDATA[<h1>Space Marine System API</h1>]]></doctitle>
+            <bottom><![CDATA[<i>Generated by Apache Ant with Ivy</i>]]></bottom>
+        </javadoc>
+
+        <!-- Calculate checksums -->
+        <checksum algorithm="MD5" file="${jar.file}" property="md5sum"/>
+        <checksum algorithm="SHA-1" file="${jar.file}" property="sha1sum"/>
+
+        <!-- Update manifest with checksums -->
+        <manifest file="${dist.dir}/MANIFEST.MF" mode="update">
+            <attribute name="MD5-Checksum" value="${md5sum}"/>
+            <attribute name="SHA1-Checksum" value="${sha1sum}"/>
+        </manifest>
+
+        <!-- Update JAR -->
+        <jar destfile="${jar.file}" update="true">
+            <metainf dir="${dist.dir}">
+                <include name="MANIFEST.MF"/>
+            </metainf>
+        </jar>
+
+        <echo message="Documentation generated in ${javadoc.dir}"/>
+        <echo message="MANIFEST.MF updated with checksums."/>
+    </target>
+
+    <!-- Native2ascii target -->
+    <target name="native2ascii" description="Convert localization files">
+        <echo message="Running native2ascii for localization files..."/>
+
+        <mkdir dir="${n2a.dest.dir}"/>
+
+        <!-- Create sample properties if none exist -->
+        <available file="${resources.dir}/messages.properties" property="props.exist"/>
+
+        <if>
+            <not>
+                <isset property="props.exist"/>
+            </not>
+            <then>
+                <echo message="Creating sample properties files..."/>
+
+                <echo file="${resources.dir}/messages.properties" encoding="UTF-8">
+                    # Sample English messages
+                    app.title=Space Marine Management System
+                    app.welcome=Welcome to Space Marine System
+                    error.notfound=Resource not found
+                    error.server=Server error occurred
+                    success.save=Data saved successfully
+                </echo>
+            </then>
+        </if>
+
+        <!-- Convert properties files -->
+        <native2ascii encoding="${encoding}"
+                      src="${resources.dir}"
+                      dest="${n2a.dest.dir}"
+                      includes="**/*.properties"/>
+
+        <echo message="Native2ascii conversion completed in ${n2a.dest.dir}"/>
+    </target>
+
+    <!-- Music target -->
+    <target name="music" description="Play music after build">
+        <echo message="Playing build completion music..."/>
+
+        <exec executable="cmd" osfamily="windows">
+            <arg value="/c"/>
+            <arg value="powershell"/>
+            <arg value="-Command"/>
+            <arg value="[console]::beep(1000,300); [console]::beep(800,200); [console]::beep(1200,500)"/>
+        </exec>
+
+        <echo message="Build complete music played!"/>
+    </target>
+
+    <!-- Alt target - creates alternative version with comprehensive replacements -->
+    <target name="alt" depends="resolve" description="Create alternative version with replaced names">
+        <echo message="Creating alternative version of the application..."/>
+
+        <!-- Create directories -->
+        <property name="alt.temp.dir" value="${build.dir}/alt-temp"/>
+        <property name="alt.final.dir" value="${build.dir}/alt-final"/>
+
+        <mkdir dir="${alt.temp.dir}"/>
+        <mkdir dir="${alt.final.dir}/src/main/java"/>
+        <mkdir dir="${alt.final.dir}/src/main/resources"/>
+        <mkdir dir="${alt.classes.dir}"/>
+        <mkdir dir="${alt.dist.dir}"/>
+
+        <!-- Step 1: Copy all source files -->
+        <echo message="Copying source files..."/>
+        <copy todir="${alt.temp.dir}" includeEmptyDirs="true">
+            <fileset dir="${src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+        </copy>
+
+        <!-- Step 2: First, rename files to match new class names -->
+        <echo message="Renaming files to match new class names..."/>
+
+        <!-- Rename SpaceMarine related files -->
+        <move todir="${alt.temp.dir}" includeemptydirs="false">
+            <fileset dir="${alt.temp.dir}" includes="**/*SpaceMarine*.java"/>
+            <regexpmapper from="^(.*/)?([^/]*SpaceMarine)([^/]*\.java)$"
+                          to="\1\2Alt\3"/>
+        </move>
+
+        <!-- Rename Chapter related files -->
+        <move todir="${alt.temp.dir}" includeemptydirs="false">
+            <fileset dir="${alt.temp.dir}" includes="**/*Chapter*.java"/>
+            <regexpmapper from="^(.*/)?([^/]*Chapter)([^/]*\.java)$"
+                          to="\1\2Alt\3"/>
+        </move>
+
+        <!-- Rename Coordinates related files -->
+        <move todir="${alt.temp.dir}" includeemptydirs="false">
+            <fileset dir="${alt.temp.dir}" includes="**/*Coordinates*.java"/>
+            <regexpmapper from="^(.*/)?([^/]*Coordinates)([^/]*\.java)$"
+                          to="\1\2Alt\3"/>
+        </move>
+
+        <!-- Rename specific DTO files -->
+        <move todir="${alt.temp.dir}" includeemptydirs="false">
+            <fileset dir="${alt.temp.dir}" includes="**/*DTO.java"/>
+            <regexpmapper from="^(.*/)?([^/]*DTO)(\.java)$"
+                          to="\1\2Alt\3"/>
+        </move>
+
+        <!-- Step 3: Now apply comprehensive replacements in file contents -->
+        <echo message="Applying comprehensive replacements in file contents..."/>
+
+        <!-- First, replace package name -->
+        <replaceregexp match="package org\.Roclh;"
+                       replace="package alt.Roclh;"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace imports from org.Roclh -->
+        <replaceregexp match="import org\.Roclh\."
+                       replace="import alt.Roclh."
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace SpaceMarine class names (with word boundaries) -->
+        <replaceregexp match="\bSpaceMarine\b"
+                       replace="SpaceMarineAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace Chapter class names -->
+        <replaceregexp match="\bChapter\b"
+                       replace="ChapterAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace Coordinates class names -->
+        <replaceregexp match="\bCoordinates\b"
+                       replace="CoordinatesAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace SpaceMarineService -->
+        <replaceregexp match="\bSpaceMarineService\b"
+                       replace="SpaceMarineServiceAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace ChapterService -->
+        <replaceregexp match="\bChapterService\b"
+                       replace="ChapterServiceAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace SpaceMarineRepository -->
+        <replaceregexp match="\bSpaceMarineRepository\b"
+                       replace="SpaceMarineRepositoryAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace ChapterRepository -->
+        <replaceregexp match="\bChapterRepository\b"
+                       replace="ChapterRepositoryAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace SpaceMarineDTO -->
+        <replaceregexp match="\bSpaceMarineDTO\b"
+                       replace="SpaceMarineDTOAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace ChapterDTO -->
+        <replaceregexp match="\bChapterDTO\b"
+                       replace="ChapterDTOAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Replace CoordinatesDTO -->
+        <replaceregexp match="\bCoordinatesDTO\b"
+                       replace="CoordinatesDTOAlt"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Step 4: Fix Lombok annotations (remove Alt from @Slf4j) -->
+        <replaceregexp match="@Slf4jAlt"
+                       replace="@Slf4j"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Fix getter/setter method names that might have been affected -->
+        <replaceregexp match="getMarinesCountAlt"
+                       replace="getMarinesCount"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <replaceregexp match="setMarinesCountAlt"
+                       replace="setMarinesCount"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <replaceregexp match="getNameAlt"
+                       replace="getName"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <replaceregexp match="setNameAlt"
+                       replace="setName"
+                       flags="g">
+            <fileset dir="${alt.temp.dir}" includes="**/*.java"/>
+        </replaceregexp>
+
+        <!-- Step 5: Move files to final structure (org -> alt) -->
+        <echo message="Organizing final directory structure..."/>
+
+        <!-- Copy all Java files to alt package structure -->
+        <copy todir="${alt.final.dir}/src/main/java/alt/Roclh">
+            <fileset dir="${alt.temp.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+            <mapper type="regexp" from="^(.*?/)?([^/]+)/([^/]+\.java)$"
+                    to="\2/\3"/>
+        </copy>
+
+        <!-- Step 6: Copy resources and update application.yaml -->
+        <echo message="Copying and updating resource files..."/>
+        <copy todir="${alt.final.dir}/src/main/resources">
+            <fileset dir="${resources.dir}"/>
+        </copy>
+
+        <!-- Update application.yaml -->
+        <replaceregexp file="${alt.final.dir}/src/main/resources/application.yaml">
+            <regexp pattern="org\.Roclh\.SpaceMarineApplication"/>
+            <substitution expression="alt.Roclh.SpaceMarineApplicationAlt"/>
+        </replaceregexp>
+
+        <!-- Step 7: Compile alternative version -->
+        <echo message="Compiling alternative version..."/>
+
+        <!-- Create classpath for compilation -->
+        <path id="alt.compile.classpath">
+            <fileset dir="${lib.dir}/compile" includes="**/*.jar"/>
+            <fileset dir="${lib.dir}/provided" includes="**/*.jar"/>
+        </path>
+
+        <javac srcdir="${alt.final.dir}/src/main/java"
+               destdir="${alt.classes.dir}"
+               classpathref="alt.compile.classpath"
+               includeantruntime="false"
+               debug="true"
+               deprecation="true"
+               source="${env.java.version}"
+               target="${env.java.version}"
+               encoding="UTF-8">
+            <compilerarg line="${compiler.args}"/>
+        </javac>
+
+        <!-- Copy resources to classes directory -->
+        <copy todir="${alt.classes.dir}">
+            <fileset dir="${alt.final.dir}/src/main/resources" excludes="**/*.java"/>
+        </copy>
+
+        <!-- Step 8: Create JAR file -->
+        <echo message="Creating alternative JAR file..."/>
+
+        <!-- Create runtime classpath for manifest -->
+        <path id="alt.runtime.classpath">
+            <fileset dir="${lib.dir}/runtime" includes="**/*.jar"/>
+        </path>
+
+        <!-- Convert classpath to manifest format -->
+        <pathconvert property="alt.manifest.classpath" pathsep=" ">
+            <path refid="alt.runtime.classpath"/>
+            <chainedmapper>
+                <flattenmapper/>
+                <globmapper from="*" to="lib/*"/>
+            </chainedmapper>
+        </pathconvert>
+
+        <!-- Create alt lib directory -->
+        <mkdir dir="${alt.dist.dir}/lib"/>
+        <copy todir="${alt.dist.dir}/lib" flatten="true">
+            <fileset dir="${lib.dir}/runtime" includes="**/*.jar"/>
+        </copy>
+
+        <!-- Create MANIFEST.MF for alt version -->
+        <manifest file="${alt.dist.dir}/MANIFEST.MF">
+            <attribute name="Manifest-Version" value="1.0"/>
+            <attribute name="Created-By" value="Apache Ant with Ivy"/>
+            <attribute name="Main-Class" value="alt.Roclh.SpaceMarineApplicationAlt"/>
+            <attribute name="Class-Path" value="${alt.manifest.classpath}"/>
+            <attribute name="Implementation-Title" value="${project.name}-alt"/>
+            <attribute name="Implementation-Version" value="${project.version}"/>
+        </manifest>
+
+        <!-- Build JAR -->
+        <jar destfile="${alt.dist.dir}/${alt.jar.name}"
+             basedir="${alt.classes.dir}"
+             manifest="${alt.dist.dir}/MANIFEST.MF"/>
+
+        <echo message="Alternative JAR created: ${alt.dist.dir}/${alt.jar.name}"/>
+        <echo message="Main class: alt.Roclh.SpaceMarineApplicationAlt"/>
+
+        <!-- Cleanup temp directory -->
+        <delete dir="${alt.temp.dir}"/>
+        <delete dir="${alt.final.dir}"/>
+    </target>
+
+    <!-- Env target - builds and runs with environment settings from properties -->
+    <target name="env" depends="resolve" description="Build and run with environment settings from build.properties">
+        <echo message="Building and running with environment settings..."/>
+
+        <!-- Display environment settings -->
+        <echo message="Environment settings from build.properties:"/>
+        <echo message="  Java Home: ${env.java.home}"/>
+        <echo message="  Java Version: ${env.java.version}"/>
+        <echo message="  JVM Args: ${env.jvm.args}"/>
+
+        <!-- Step 1: Check if Java is available -->
+        <echo message="Checking Java installation..."/>
+
+        <condition property="java.executable"
+                   value="${env.java.home}/bin/java.exe"
+                   else="${env.java.home}/bin/java">
+            <os family="windows"/>
+        </condition>
+
+        <available file="${java.executable}" property="java.available"/>
+
+        <fail unless="java.available"
+              message="Java not found at ${env.java.home}. Please check env.java.home in build.properties."/>
+
+        <!-- Step 2: Create environment build directories -->
+        <property name="env.build.dir" value="${build.dir}/env-build"/>
+        <property name="env.classes.dir" value="${env.build.dir}/classes"/>
+
+        <mkdir dir="${env.build.dir}"/>
+        <mkdir dir="${env.build.dir}/src/main/java"/>
+        <mkdir dir="${env.build.dir}/src/main/resources"/>
+        <mkdir dir="${env.classes.dir}"/>
+        <mkdir dir="${dist.dir}"/>
+
+        <!-- Step 3: Copy source files to environment build directory -->
+        <echo message="Preparing source files for environment build..."/>
+        <copy todir="${env.build.dir}/src/main/java">
+            <fileset dir="${src.dir}">
+                <include name="**/*.java"/>
+            </fileset>
+        </copy>
+
+        <copy todir="${env.build.dir}/src/main/resources">
+            <fileset dir="${resources.dir}"/>
+        </copy>
+
+        <!-- Step 4: Compile with specified Java version -->
+        <echo message="Compiling with Java ${env.java.version}..."/>
+
+        <!-- Create classpath for compilation -->
+        <path id="env.compile.classpath">
+            <fileset dir="${lib.dir}/compile" includes="**/*.jar"/>
+            <fileset dir="${lib.dir}/provided" includes="**/*.jar"/>
+        </path>
+
+        <javac srcdir="${env.build.dir}/src/main/java"
+               destdir="${env.classes.dir}"
+               classpathref="env.compile.classpath"
+               includeantruntime="false"
+               debug="true"
+               deprecation="true"
+               source="${env.java.version}"
+               target="${env.java.version}"
+               encoding="UTF-8">
+            <compilerarg line="${compiler.args}"/>
+        </javac>
+
+        <!-- Copy resources to classes directory -->
+        <copy todir="${env.classes.dir}">
+            <fileset dir="${env.build.dir}/src/main/resources" excludes="**/*.java"/>
+        </copy>
+
+        <!-- Step 5: Create JAR for environment -->
+        <echo message="Creating environment JAR..."/>
+
+        <!-- Create runtime classpath for manifest -->
+        <path id="env.runtime.classpath">
+            <fileset dir="${lib.dir}/runtime" includes="**/*.jar"/>
+        </path>
+
+        <!-- Convert classpath to manifest format -->
+        <pathconvert property="env.manifest.classpath" pathsep=" ">
+            <path refid="env.runtime.classpath"/>
+            <chainedmapper>
+                <flattenmapper/>
+                <globmapper from="*" to="lib/*"/>
+            </chainedmapper>
+        </pathconvert>
+
+        <!-- Create MANIFEST.MF -->
+        <manifest file="${env.build.dir}/MANIFEST.MF">
+            <attribute name="Manifest-Version" value="1.0"/>
+            <attribute name="Created-By" value="Apache Ant with Ivy"/>
+            <attribute name="Main-Class" value="${main.class}"/>
+            <attribute name="Class-Path" value="${env.manifest.classpath}"/>
+            <attribute name="Implementation-Title" value="${project.name}-env"/>
+            <attribute name="Implementation-Version" value="${project.version}"/>
+        </manifest>
+
+        <!-- Build JAR -->
+        <property name="env.jar.file" value="${dist.dir}/${project.name}-env.jar"/>
+        <jar destfile="${env.jar.file}"
+             basedir="${env.classes.dir}"
+             manifest="${env.build.dir}/MANIFEST.MF"/>
+
+        <echo message="Environment JAR created: ${env.jar.file}"/>
+
+        <!-- Step 6: Copy dependencies to lib directory -->
+        <mkdir dir="${dist.dir}/env-lib"/>
+        <copy todir="${dist.dir}/env-lib" flatten="true">
+            <fileset dir="${lib.dir}/runtime" includes="**/*.jar"/>
+        </copy>
+
+        <!-- Step 7: Run the application with environment settings -->
+        <echo message="Running application with environment settings..."/>
+        <echo message="Java: ${env.java.home}"/>
+        <echo message="JVM Args: ${env.jvm.args}"/>
+        <echo message="JAR: ${env.jar.file}"/>
+
+        <!-- Display full command -->
+        <echo message="Command: ${java.executable} ${env.jvm.args} -jar ${env.jar.file}"/>
+
+        <!-- Run in background (spawn="true") -->
+        <exec executable="${java.executable}" spawn="true">
+            <arg line="${env.jvm.args}"/>
+            <arg value="-jar"/>
+            <arg value="${env.jar.file}"/>
+        </exec>
+
+        <echo message=""/>
+        <echo message="Application started with environment settings."/>
+        <echo message="Check application logs for output."/>
+        <echo message=""/>
+        <echo message="To stop the application, find the Java process and terminate it."/>
+    </target>
+
+    <!-- Help target -->
+    <target name="help" description="Show help information">
+        <echo message="SpaceMarine System Build Script (Apache Ant + Ivy)"/>
+        <echo message="================================================="/>
+        <echo message="Available targets:"/>
+        <echo message=""/>
+        <echo message="  resolve      - Download dependencies with Ivy"/>
+        <echo message="  clean        - Remove compiled classes and temporary files"/>
+        <echo message="  compile      - Compile source code with Ivy dependencies"/>
+        <echo message="  build        - Compile and package into JAR (plays music)"/>
+        <echo message="  test         - Run JUnit tests"/>
+        <echo message="  env          - Build and run using environment from properties"/>
+        <echo message="  xml          - Validate all XML files"/>
+        <echo message="  doc          - Generate javadoc and update MANIFEST.MF"/>
+        <echo message="  native2ascii - Convert localization files"/>
+        <echo message="  music        - Play music"/>
+        <echo message="  help         - Show this help message"/>
+        <echo message=""/>
+        <echo message="Environment settings in build.properties:"/>
+        <echo message="  env.java.home    - Java installation path"/>
+        <echo message="  env.jvm.args     - JVM arguments for running"/>
+        <echo message="  env.java.version - Java version for compilation"/>
+        <echo message=""/>
+        <echo message="Note: Uses Apache Ivy for dependency management instead of Maven."/>
     </target>
 </project>

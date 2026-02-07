@@ -1,24 +1,61 @@
-<?xml version="1.0" encoding="ISO-8859-1"?>
-<ivy-module version="2.0"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<?xml version="1.0" encoding="UTF-8"?>
+<ivy-module version="2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
             xsi:noNamespaceSchemaLocation="http://ant.apache.org/ivy/schemas/ivy.xsd">
-    <info organisation="in.ex" module="ivy-example" status="integration">
-    </info>
+    <info organisation="org.Roclh" module="islab1" status="integration"/>
+
     <configurations>
-        <conf name="jars" description="Jars"/>
+        <conf name="compile" description="Compile dependencies"/>
+        <conf name="runtime" description="Runtime dependencies" extends="compile"/>
+        <conf name="test" description="Test dependencies" extends="runtime"/>
+        <conf name="provided" description="Provided dependencies"/>
     </configurations>
+
     <dependencies>
-        <dependency org="javax.servlet" name="javax.servlet-api" rev="3.1.0" conf="jars->default" />
-        <dependency org="com.sun.faces" name="jsf-api" rev="2.2.15" conf="jars->default" />
-        <dependency org="com.sun.faces" name="jsf-impl" rev="2.2.15" conf="jars->default" />
-        <dependency org="org.primefaces" name="primefaces" rev="6.1" conf="jars->default" />
-        <dependency org="org.eclipse.persistence" name="eclipselink" rev="2.7.9" conf="jars->default" />
-        <dependency org="jakarta.persistence" name="jakarta.persistence-api" rev="2.2.3" conf="jars->default" />
-        <dependency org="org.postgresql" name="postgresql" rev="42.2.18" conf="jars->default" />
-        <dependency org="org.junit.jupiter" name="junit-jupiter-api" rev="5.9.1" conf="jars->default" />
-        <dependency org="org.junit.platform" name="junit-platform-launcher" rev="1.9.3" conf="jars->default" />
-        <dependency org="org.junit.jupiter" name="junit-jupiter-engine" rev="5.9.3" conf="jars->default" />
-        <dependency org="org.junit.jupiter" name="junit-jupiter-params" rev="5.9.3" conf="jars->default" />
-        <dependency org="ant-contrib" name="ant-contrib" rev="1.0b3" conf="jars->default" />
+        <!-- Spring Boot Starter Web -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-web" rev="3.1.0" conf="compile->default"/>
+
+        <!-- Spring Boot Starter Data JPA -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-data-jpa" rev="3.1.0" conf="compile->default"/>
+
+        <!-- Spring Boot Starter Thymeleaf -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-thymeleaf" rev="3.1.0" conf="compile->default"/>
+
+        <!-- Thymeleaf Layout Dialect -->
+        <dependency org="nz.net.ultraq.thymeleaf" name="thymeleaf-layout-dialect" rev="3.2.0" conf="compile->default"/>
+
+        <!-- Spring Boot Starter WebSocket -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-websocket" rev="3.1.0" conf="compile->default"/>
+
+        <!-- Spring Boot Starter Validation -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-validation" rev="3.1.0" conf="compile->default"/>
+
+        <!-- Spring Boot Starter Actuator -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-actuator" rev="3.1.0" conf="compile->default"/>
+
+        <!-- Spring Boot Starter Tomcat (embedded) -->
+        <dependency org="org.springframework.boot" name="spring-boot-starter-tomcat" rev="3.1.0" conf="compile->default"/>
+
+        <!-- PostgreSQL Driver -->
+        <dependency org="org.postgresql" name="postgresql" rev="42.6.0" conf="runtime->default"/>
+
+        <!-- Lombok -->
+        <dependency org="org.projectlombok" name="lombok" rev="1.18.34" conf="provided->default"/>
+
+        <!-- WebJars -->
+        <dependency org="org.webjars" name="bootstrap" rev="5.3.0" conf="compile->default"/>
+        <dependency org="org.webjars" name="jquery" rev="3.6.0" conf="compile->default"/>
+        <dependency org="org.webjars" name="sockjs-client" rev="1.5.1" conf="compile->default"/>
+        <dependency org="org.webjars" name="stomp-websocket" rev="2.3.4" conf="compile->default"/>
+
+        <!-- Test Dependencies -->
+        <dependency org="org.junit.jupiter" name="junit-jupiter-api" rev="${junit.jupiter.version}" conf="test->default"/>
+        <dependency org="org.junit.jupiter" name="junit-jupiter-engine" rev="${junit.jupiter.version}" conf="test->default"/>
+        <dependency org="org.junit.jupiter" name="junit-jupiter-params" rev="${junit.jupiter.version}" conf="test->default"/>
+        <dependency org="org.junit.platform" name="junit-platform-launcher" rev="${junit.platform.version}" conf="test->default"/>
+        <dependency org="org.junit.platform" name="junit-platform-suite-api" rev="${junit.platform.version}" conf="test->default"/>
+        <dependency org="org.junit.platform" name="junit-platform-suite-engine" rev="${junit.platform.version}" conf="test->default"/>
+        <dependency org="org.junit.vintage" name="junit-vintage-engine" rev="${junit.vintage.version}" conf="test->default"/>
+        <dependency org="org.springframework.boot" name="spring-boot-starter-test" rev="3.1.0" conf="test->default"/>
+        <dependency org="com.h2database" name="h2" rev="2.1.214" conf="test->default"/>
     </dependencies>
 </ivy-module>

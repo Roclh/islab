@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ivysettings>
+    <settings defaultResolver="central"/>
+    <resolvers>
+        <ibiblio name="central" m2compatible="true" root="https://repo1.maven.org/maven2/"/>
+        <ibiblio name="spring" m2compatible="true" root="https://repo.spring.io/release"/>
+        <ibiblio name="spring-milestone" m2compatible="true" root="https://repo.spring.io/milestone"/>
+        <ibiblio name="spring-snapshot" m2compatible="true" root="https://repo.spring.io/snapshot"/>
+    </resolvers>
+</ivysettings>
