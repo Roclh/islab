@@ -820,20 +820,18 @@
                         </exec>
 
                         <!-- Clean commit message for filename (alternative without JavaScript) -->
-                        <script language="javascript">
-                            <![CDATA[
-                            var message = project.getProperty("commit.message.temp");
-                            if (message) {
-                                // Replace all non-alphanumeric characters with underscore
-                                var clean = message.replace(/[^a-zA-Z0-9\-\.]/g, '_');
-                                // Limit to 30 characters
-                                if (clean.length > 30) {
-                                    clean = clean.substring(0, 30);
-                                }
-                                project.setProperty("clean.commit.message", clean);
-                            }
-                        ]]>
-                        </script>
+                        <propertyregex property="clean.commit.message.temp"
+                                       input="${commit.message}"
+                                       regexp="[^a-zA-Z0-9\-\.]"
+                                       replace="_"
+                                       global="true"
+                                       defaultValue="${commit.message}"/>
+
+                        <propertyregex property="clean.commit.message"
+                                       input="${clean.commit.message.temp}"
+                                       regexp="^(.{0,30}).*"
+                                       select="\1"
+                                       defaultValue="${clean.commit.message.temp}"/>
 
                         <propertyregex property="clean.commit.message"
                                        input="${clean.commit.message.temp}"
