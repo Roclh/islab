@@ -753,74 +753,165 @@
         <property name="team.build.dir" value="${build.dir}/team-builds"/>
         <mkdir dir="${team.build.dir}"/>
 
-        <!-- Save current commit hash to return later -->
-        <exec executable="${git.executable}" outputproperty="current.commit" failonerror="true">
+        <!-- Save current branch and commit -->
+        <exec executable="${git.executable}" outputproperty="original.branch" failonerror="false">
+            <arg value="rev-parse"/>
+            <arg value="--abbrev-ref"/>
+            <arg value="HEAD"/>
+        </exec>
+        <exec executable="${git.executable}" outputproperty="original.commit" failonerror="false">
             <arg value="rev-parse"/>
             <arg value="HEAD"/>
         </exec>
 
-        <echo message="Current commit: ${current.commit}"/>
+        <echo message="Original branch: ${original.branch}"/>
+        <echo message="Original commit: ${original.commit}"/>
 
-        <!-- List of revisions to build (4 previous commits) -->
+        <!-- Process each revision -->
         <property name="revision.list" value="1,2,3,4"/>
+        <property name="revision.count" value="0"/>
 
-        <!-- Loop through each revision -->
-        <for list="${revision.list}" param="revision.num">
+        <for list="${revision.list}" param="rev">
             <sequential>
-                <echo message="=== Processing revision HEAD~@{revision.num} ==="/>
+                <echo message="=== Building revision HEAD~@{rev} ==="/>
 
-                <!-- Save original jar file name -->
-                <propertycopy property="original.jar.file" from="jar.file"/>
+                <!-- Checkout to revision -->
+                <exec executable="${git.executable}" resultproperty="git.result" failonerror="false">
+                    <arg value="checkout"/>
+                    <arg value="-f"/>
+                    <arg value="HEAD~@{rev}"/>
+                </exec>
 
-                <!-- Calculate new jar file name for this revision -->
-                <property name="revision.jar.file" value="${team.build.dir}/build-revision-@{revision.num}.jar"/>
+                <if>
+                    <equals arg1="${git.result}" arg2="0"/>
+                    <then>
+                        <!-- Get current commit hash for naming -->
+                        <exec executable="${git.executable}" outputproperty="current.rev.hash" failonerror="false">
+                            <arg value="rev-parse"/>
+                            <arg value="--short"/>
+                            <arg value="HEAD"/>
+                        </exec>
 
-                <!-- Checkout to specific revision -->
-                <try>
-                    <exec executable="${git.executable}" failonerror="true">
-                        <arg value="checkout"/>
-                        <arg value="-f"/>
-                        <arg value="HEAD~@{revision.num}"/>
-                    </exec>
+                        <!-- Get commit date for naming -->
+                        <exec executable="${git.executable}" outputproperty="current.rev.date" failonerror="false">
+                            <arg value="log"/>
+                            <arg value="-1"/>
+                            <arg value="--format=%cd"/>
+                            <arg value="--date=short"/>
+                        </exec>
 
-                    <echo message="Checked out to revision: HEAD~@{revision.num}"/>
+                        <!-- Remove dashes from date for filename -->
+                        <propertyregex property="clean.date"
+                                       input="${current.rev.date}"
+                                       regexp="(\d{4})-(\d{2})-(\d{2})"
+                                       replace="\1\2\3"
+                                       defaultValue="${current.rev.date}"/>
 
-                    <!-- Call build target with modified jar file location -->
-                    <antcall target="build">
-                        <param name="jar.file" value="${revision.jar.file}"/>
-                        <!-- Also override dist.dir to avoid conflicts -->
-                        <param name="dist.dir" value="${team.build.dir}/dist-@{revision.num}"/>
-                    </antcall>
+                        <!-- Build this revision with unique name -->
+                        <antcall target="team-build-revision">
+                            <param name="revision.number" value="@{rev}"/>
+                            <param name="commit.hash" value="${current.rev.hash}"/>
+                            <param name="commit.date" value="${clean.date}"/>
+                        </antcall>
 
-                    <echo message="Successfully built revision HEAD~@{revision.num}"/>
-                </try>
-                <catch>
-                    <echo message="Failed to build revision HEAD~@{revision.num}. Skipping..."/>
-                </catch>
-                <finally>
-                    <!-- Always return to original commit -->
-                    <exec executable="${git.executable}" failonerror="true">
-                        <arg value="checkout"/>
-                        <arg value="-f"/>
-                        <arg value="${current.commit}"/>
-                    </exec>
-                    <echo message="Returned to original commit"/>
-                </finally>
+                        <!-- Increment revision count -->
+                        <math result="revision.count" operand1="${revision.count}" operation="+" operand2="1" datatype="int"/>
+                    </then>
+                    <else>
+                        <echo message="Cannot checkout HEAD~@{rev}. Skipping this revision."/>
+                    </else>
+                </if>
             </sequential>
         </for>
 
-        <!-- Create zip archive with all built jars -->
+        <!-- Return to original branch or master -->
+        <echo message="Returning to original state..."/>
+        <if>
+            <equals arg1="${original.branch}" arg2="HEAD"/>
+            <then>
+                <!-- We were in detached HEAD, checkout the commit directly -->
+                <exec executable="${git.executable}" failonerror="false">
+                    <arg value="checkout"/>
+                    <arg value="-f"/>
+                    <arg value="${original.commit}"/>
+                </exec>
+                <echo message="Returned to commit: ${original.commit}"/>
+            </then>
+            <else>
+                <!-- Return to original branch -->
+                <exec executable="${git.executable}" failonerror="false">
+                    <arg value="checkout"/>
+                    <arg value="-f"/>
+                    <arg value="${original.branch}"/>
+                </exec>
+                <echo message="Returned to branch: ${original.branch}"/>
+            </else>
+        </if>
+
+        <!-- Create zip archive -->
+        <antcall target="team-create-zip"/>
+
+        <echo message="Team build process completed. Built ${revision.count} revision(s)."/>
+    </target>
+
+    <!-- Helper target to build a single revision -->
+    <target name="team-build-revision">
+        <echo message="Building revision ${revision.number} (commit: ${commit.hash}, date: ${commit.date})..."/>
+
+        <!-- Set up paths for this revision -->
+        <property name="rev.jar.file" value="${team.build.dir}/build-rev-${revision.number}-${commit.hash}-${commit.date}.jar"/>
+        <property name="rev.dist.dir" value="${team.build.dir}/dist-${revision.number}"/>
+
+        <!-- Make sure dist directory exists and is empty -->
+        <delete dir="${rev.dist.dir}" quiet="true"/>
+        <mkdir dir="${rev.dist.dir}"/>
+
+        <!-- Call the standard build target with custom parameters -->
+        <antcall target="build">
+            <param name="jar.file" value="${rev.jar.file}"/>
+            <param name="dist.dir" value="${rev.dist.dir}"/>
+        </antcall>
+
+        <echo message="Revision ${revision.number} built successfully."/>
+    </target>
+
+    <!-- Helper target to create zip archive -->
+    <target name="team-create-zip">
         <echo message="Creating zip archive with all built revisions..."/>
-        <zip destfile="${team.build.dir}/all-revisions.zip" basedir="${team.build.dir}" includes="build-revision-*.jar"/>
 
-        <!-- Clean up temporary dist directories -->
-        <delete includeemptydirs="true">
-            <fileset dir="${team.build.dir}" includes="dist-*/**"/>
-        </delete>
+        <!-- Check if any jar files were created -->
+        <fileset id="team.jars" dir="${team.build.dir}" includes="build-rev-*.jar"/>
+        <resourcecount refid="team.jars" property="team.jar.count"/>
 
-        <echo message="Team build completed successfully!"/>
-        <echo message="Zip archive created: ${team.build.dir}/all-revisions.zip"/>
-        <echo message="Individual jar files are in: ${team.build.dir}/"/>
+        <if>
+            <not>
+                <equals arg1="${team.jar.count}" arg2="0"/>
+            </not>
+            <then>
+                <!-- Delete old zip if exists -->
+                <delete file="${team.build.dir}/team-builds.zip" quiet="true"/>
+
+                <!-- Create zip with all jar files -->
+                <zip destfile="${team.build.dir}/team-builds.zip">
+                    <fileset dir="${team.build.dir}" includes="build-rev-*.jar"/>
+                </zip>
+
+                <echo message="Zip archive created: ${team.build.dir}/team-builds.zip"/>
+                <echo message="Contains ${team.jar.count} jar file(s):"/>
+                <for param="jar.file">
+                    <path>
+                        <fileset dir="${team.build.dir}" includes="build-rev-*.jar"/>
+                    </path>
+                    <sequential>
+                        <basename property="jar.name" file="@{jar.file}"/>
+                        <echo message="  - ${jar.name}"/>
+                    </sequential>
+                </for>
+            </then>
+            <else>
+                <echo message="Warning: No jar files were created for any revision."/>
+            </else>
+        </if>
     </target>
 
     <!-- Help target -->
