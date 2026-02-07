@@ -18,6 +18,13 @@
         </classpath>
     </taskdef>
 
+    <taskdef resource="org.apache.tools.ant.taskdefs.optional.ssh.Scp">
+        <classpath>
+            <pathelement location="${lib.dir}/lib/jsch-0.1.55.jar"/>
+            <pathelement location="${lib.dir}/lib/ant-jsch.jar"/>
+        </classpath>
+    </taskdef>
+
     <target name="resolve" description="resolve dependencies with ivy">
         <echo message="Resolving dependencies..."/>
         <ivy:resolve/>
@@ -967,6 +974,351 @@
         <echo message="Team build process finished."/>
     </target>
 
+    <!-- Простой SCP с JSch -->
+    <target name="scp" depends="build" description="Simple SCP with JSch">
+        <echo message="Transferring JAR via SCP..."/>
+
+        <!-- HARDCODED PARAMETERS - CHANGE THESE! -->
+        <property name="remote.host" value="se.ifmo.ru"/>
+        <property name="remote.port" value="2222"/>
+        <property name="remote.user" value="s247666"/>
+        <property name="remote.dir" value="~/opi.jar"/>
+        <property name="remote.pass" value="nKHL.1697"/>
+
+        <echo message="Target: ${remote.user}@${remote.host}:${remote.port}${remote.dir}"/>
+
+        <!-- Выполняем SCP -->
+        <scp file="${jar.file}"
+             todir="${remote.user}:${remote.pass}@${remote.host}:${remote.dir}"
+             port="${remote.port}"
+             trust="yes"
+             verbose="yes"/>
+
+        <echo message="Transfer completed!"/>
+    </target>
+
+    <!-- Create local SVN repository -->
+    <target name="svn-init" description="Create local SVN repository structure">
+        <echo message="Setting up local SVN repository..."/>
+
+        <!-- HARDCODED: SVN repository path -->
+        <property name="svn.repo.path" value="${basedir}/.svn-repo"/>
+        <property name="svn.working.copy" value="${basedir}/svn-workcopy"/>
+        <property name="svn.trunk" value="${svn.repo.path}/trunk"/>
+
+        <!-- Check if SVN is installed -->
+        <exec executable="svn" failonerror="false" resultproperty="svn.available">
+            <arg value="--version"/>
+        </exec>
+
+        <if>
+            <not>
+                <equals arg1="${svn.available}" arg2="0"/>
+            </not>
+            <then>
+                <echo message="SVN is not installed or not in PATH"/>
+                <echo message="For Windows, download TortoiseSVN or SlikSVN"/>
+                <echo message="For Ubuntu/Debian: sudo apt-get install subversion"/>
+                <echo message="For macOS: brew install subversion"/>
+                <fail message="SVN is required for history and diff targets"/>
+            </then>
+            <else>
+                <echo message="SVN is available"/>
+            </else>
+        </if>
+
+        <!-- Create repository directory if it doesn't exist -->
+        <mkdir dir="${svn.repo.path}"/>
+
+        <!-- Create SVN repository -->
+        <exec executable="svnadmin" failonerror="false" resultproperty="repo.create.result">
+            <arg value="create"/>
+            <arg value="${svn.repo.path}"/>
+        </exec>
+
+        <if>
+            <equals arg1="${repo.create.result}" arg2="0"/>
+            <then>
+                <echo message="SVN repository created at: ${svn.repo.path}"/>
+            </then>
+            <else>
+                <echo message="SVN repository already exists or failed to create"/>
+            </else>
+        </if>
+
+        <!-- Create standard directory structure -->
+        <mkdir dir="${build.dir}/svn-temp"/>
+        <mkdir dir="${build.dir}/svn-temp/trunk"/>
+        <mkdir dir="${build.dir}/svn-temp/branches"/>
+        <mkdir dir="${build.dir}/svn-temp/tags"/>
+
+        <!-- Import initial structure -->
+        <exec executable="svn" failonerror="false" dir="${build.dir}">
+            <arg value="import"/>
+            <arg value="svn-temp"/>
+            <arg value="file:///${svn.repo.path}"/>
+            <arg value="-m"/>
+            <arg value="Initial repository structure"/>
+        </exec>
+
+        <!-- Checkout working copy -->
+        <delete dir="${svn.working.copy}" quiet="true"/>
+        <mkdir dir="${svn.working.copy}"/>
+
+        <exec executable="svn" failonerror="false" dir="${svn.working.copy}">
+            <arg value="checkout"/>
+            <arg value="file:///${svn.repo.path}/trunk"/>
+            <arg value="."/>
+        </exec>
+
+        <!-- Cleanup temp directory -->
+        <delete dir="${build.dir}/svn-temp"/>
+
+        <echo message="=========================================="/>
+        <echo message="Local SVN repository created successfully!"/>
+        <echo message="Repository: ${svn.repo.path}"/>
+        <echo message="Working copy: ${svn.working.copy}"/>
+        <echo message="Use: svn checkout file:///${svn.repo.path}/trunk"/>
+        <echo message="=========================================="/>
+    </target>
+
+    <!-- Import current project to SVN -->
+    <target name="svn-import" depends="svn-init" description="Import current project to SVN repository">
+        <echo message="Importing current project to SVN..."/>
+
+        <!-- Copy project files to working copy (excluding .git, target, etc.) -->
+        <copy todir="${svn.working.copy}" overwrite="true">
+            <fileset dir="${basedir}">
+                <include name="src/**"/>
+                <include name="build.xml"/>
+                <include name="build.properties"/>
+                <include name="ivy.xml"/>
+                <include name="ivysettings.xml"/>
+                <include name="pom.xml"/>
+                <exclude name="**/.git/**"/>
+                <exclude name="target/**"/>
+                <exclude name="**/.idea/**"/>
+                <exclude name="**/*.iml"/>
+                <exclude name=".svn-repo/**"/>
+                <exclude name="svn-workcopy/**"/>
+            </fileset>
+        </copy>
+
+        <!-- Add files to SVN -->
+        <exec executable="svn" failonerror="false" dir="${svn.working.copy}">
+            <arg value="add"/>
+            <arg value="--force"/>
+            <arg value="."/>
+        </exec>
+
+        <!-- Commit initial import -->
+        <exec executable="svn" failonerror="false" dir="${svn.working.copy}">
+            <arg value="commit"/>
+            <arg value="-m"/>
+            <arg value="Initial project import from Git"/>
+        </exec>
+
+        <echo message="Project imported to SVN successfully!"/>
+        <echo message="SVN Revision: HEAD"/>
+    </target>
+
+    <!-- Simplified history target - just tries last 10 revisions -->
+    <target name="history" description="Try last 10 revisions to find working one">
+        <echo message="Checking last 10 SVN revisions..."/>
+
+        <property name="svn.wc" value="${basedir}/svn-workcopy"/>
+
+        <!-- Check SVN WC -->
+        <fail message="SVN working copy not found. Run 'ant svn-init'">
+            <condition>
+                <not>
+                    <available file="${svn.wc}/.svn"/>
+                </not>
+            </condition>
+        </fail>
+
+        <!-- Get current revision -->
+        <exec executable="svn" outputproperty="current.rev" dir="${svn.wc}" failonerror="false">
+            <arg value="info"/>
+            <arg value="--show-item"/>
+            <arg value="revision"/>
+        </exec>
+
+        <echo message="Current revision: r${current.rev}"/>
+
+        <!-- Try revisions from current down to current-9 -->
+        <math result="start.rev" operand1="${current.rev}" operation="-" operand2="9" datatype="int"/>
+
+        <!-- Make sure start is at least 1 -->
+        <condition property="actual.start" value="${start.rev}" else="1">
+            <isgreaterthan arg1="${start.rev}" arg2="0"/>
+        </condition>
+
+        <echo message="Testing revisions from r${actual.start} to r${current.rev}"/>
+
+        <property name="found.working" value="false"/>
+        <property name="working.rev" value="0"/>
+        <property name="broken.rev" value="${current.rev}"/>
+
+        <for param="i" start="${actual.start}" end="${current.rev}">
+            <sequential>
+                <if>
+                    <equals arg1="${found.working}" arg2="false"/>
+                    <then>
+                        <echo message="Testing revision r@{i}..."/>
+
+                        <!-- Simple approach: just try to compile in place -->
+                        <exec executable="svn" dir="${svn.wc}" failonerror="false" resultproperty="update.result">
+                            <arg value="update"/>
+                            <arg value="-r"/>
+                            <arg value="@{i}"/>
+                        </exec>
+
+                        <if>
+                            <equals arg1="${update.result}" arg2="0"/>
+                            <then>
+                                <trycatch>
+                                    <try>
+                                        <!-- Quick compile check -->
+                                        <exec executable="ant" dir="${svn.wc}" failonerror="true">
+                                            <arg value="compile"/>
+                                        </exec>
+                                        <property name="found.working" value="true"/>
+                                        <property name="working.rev" value="@{i}"/>
+                                        <echo message="r@{i} WORKS!"/>
+                                    </try>
+                                    <catch>
+                                        <property name="broken.rev" value="@{i}"/>
+                                        <echo message="r@{i} fails"/>
+                                    </catch>
+                                </trycatch>
+                            </then>
+                        </if>
+                    </then>
+                </if>
+            </sequential>
+        </for>
+
+        <!-- Generate result -->
+        <if>
+            <equals arg1="${found.working}" arg2="true"/>
+            <then>
+                <echo message="=========================================="/>
+                <echo message="Found working revision: r${working.rev}"/>
+                <echo message="Broken revision: r${broken.rev}"/>
+
+                <!-- Create simple diff -->
+                <exec executable="svn" outputproperty="simple.diff" dir="${svn.wc}" failonerror="false">
+                    <arg value="diff"/>
+                    <arg value="-r"/>
+                    <arg value="${working.rev}:${broken.rev}"/>
+                    <arg value="--summarize"/>
+                </exec>
+
+                <echo message="Changed files:"/>
+                <echo message="${simple.diff}"/>
+                <echo message="=========================================="/>
+            </then>
+            <else>
+                <echo message="No working revision found in last 10 revisions."/>
+            </else>
+        </if>
+
+        <!-- Return to original -->
+        <exec executable="svn" dir="${svn.wc}" failonerror="false">
+            <arg value="update"/>
+            <arg value="-r"/>
+            <arg value="${current.rev}"/>
+        </exec>
+    </target>
+
+    <!-- Simplified diff target for SVN -->
+    <target name="diff" description="Simplified SVN auto-commit">
+        <echo message="Checking SVN status for auto-commit..."/>
+
+        <!-- HARDCODED settings -->
+        <property name="svn.wc" value="${basedir}/svn-workcopy"/>
+
+        <!-- Check working copy -->
+        <fail message="SVN working copy not found at ${svn.wc}. Run 'ant svn-init' first.">
+            <condition>
+                <not>
+                    <available file="${svn.wc}/.svn"/>
+                </not>
+            </condition>
+        </fail>
+
+        <!-- Check status of all files -->
+        <exec executable="svn" outputproperty="svn.all.status" dir="${svn.wc}" failonerror="false">
+            <arg value="status"/>
+        </exec>
+
+        <!-- Filter for Java and build files -->
+        <exec executable="svn" outputproperty="svn.filtered.status" dir="${svn.wc}" failonerror="false">
+            <arg value="status"/>
+            <arg value="src/main/java/"/>
+            <arg value="build.xml"/>
+            <arg value="*.properties"/>
+            <arg value="ivy.xml"/>
+        </exec>
+
+        <!-- Check if we have filtered changes -->
+        <condition property="has.filtered.changes">
+            <and>
+                <isset property="svn.filtered.status"/>
+                <not>
+                    <equals arg1="${svn.filtered.status}" arg2=""/>
+                </not>
+            </and>
+        </condition>
+
+        <if>
+            <isset property="has.filtered.changes"/>
+            <then>
+                <echo message="Found changes to commit:"/>
+                <echo message="${svn.filtered.status}"/>
+
+                <!-- Add files -->
+                <exec executable="svn" dir="${svn.wc}" failonerror="false">
+                    <arg value="add"/>
+                    <arg value="--force"/>
+                    <arg value="src/main/java/"/>
+                    <arg value="build.xml"/>
+                    <arg value="*.properties"/>
+                    <arg value="ivy.xml"/>
+                </exec>
+
+                <!-- Commit -->
+                <tstamp>
+                    <format property="commit.ts" pattern="yyyy-MM-dd HH:mm:ss"/>
+                </tstamp>
+
+                <exec executable="svn" dir="${svn.wc}" failonerror="false">
+                    <arg value="commit"/>
+                    <arg value="-m"/>
+                    <arg value="Auto-commit at ${commit.ts}"/>
+                </exec>
+
+                <echo message="Changes committed successfully!"/>
+            </then>
+            <else>
+                <echo message="No changes to commit in tracked directories."/>
+                <if>
+                    <and>
+                        <isset property="svn.all.status"/>
+                        <not>
+                            <equals arg1="${svn.all.status}" arg2=""/>
+                        </not>
+                    </and>
+                    <then>
+                        <echo message="Other changes (not committed):"/>
+                        <echo message="${svn.all.status}"/>
+                    </then>
+                </if>
+            </else>
+        </if>
+    </target>
+
     <!-- Help target -->
     <target name="help" description="Show help information">
         <echo message="SpaceMarine System Build Script (Apache Ant + Ivy)"/>
@@ -977,7 +1329,14 @@
         <echo message="  clean        - Remove compiled classes and temporary files"/>
         <echo message="  compile      - Compile source code with Ivy dependencies"/>
         <echo message="  build        - Compile and package into JAR (plays music)"/>
+        <echo message="  scp          - Send JAR to server via SCP (hardcoded)"/>
         <echo message="  test         - Run JUnit tests"/>
+        <echo message="  report       - Save test reports to git repository"/>
+        <echo message="  team         - Build last 4 revisions and package in zip"/>
+        <echo message="  svn-init     - Create local SVN repository"/>
+        <echo message="  svn-import   - Import project to SVN"/>
+        <echo message="  history      - Find last working revision in SVN history"/>
+        <echo message="  diff         - Auto-commit changes to SVN"/>
         <echo message="  env          - Build and run using environment from properties"/>
         <echo message="  xml          - Validate all XML files"/>
         <echo message="  doc          - Generate javadoc and update MANIFEST.MF"/>
@@ -985,11 +1344,14 @@
         <echo message="  music        - Play music"/>
         <echo message="  help         - Show this help message"/>
         <echo message=""/>
-        <echo message="Environment settings in build.properties:"/>
-        <echo message="  env.java.home    - Java installation path"/>
-        <echo message="  env.jvm.args     - JVM arguments for running"/>
-        <echo message="  env.java.version - Java version for compilation"/>
+        <echo message="SVN Workflow:"/>
+        <echo message="  1. ant svn-init     - Create SVN repo"/>
+        <echo message="  2. ant svn-import   - Import project"/>
+        <echo message="  3. Work in svn-workcopy directory"/>
+        <echo message="  4. ant diff         - Auto-commit changes"/>
+        <echo message="  5. ant history      - Find broken revisions"/>
         <echo message=""/>
-        <echo message="Note: Uses Apache Ivy for dependency management instead of Maven."/>
+        <echo message="Note: SVN repository at: .svn-repo/"/>
+        <echo message="      SVN working copy at: svn-workcopy/"/>
     </target>
 </project>
