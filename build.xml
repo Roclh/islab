@@ -694,6 +694,53 @@
         <echo message="To stop the application, find the Java process and terminate it."/>
     </target>
 
+    <target name="report" depends="test" description="в случае успешного прохождения тестов сохраняет отчет junit в формате xml, добавляет его в репозиторий git и выполняет commit">
+        <echo message="Preparing test reports for git repository..."/>
+
+        <!-- Создаем папку для отчетов вне target (не в gitignore) -->
+        <mkdir dir="${git.reports.dir}"/>
+
+        <!-- Копируем XML отчеты в папку, которая будет добавлена в git -->
+        <copy todir="${git.reports.dir}" flatten="true">
+            <fileset dir="${reports.dir}/junit">
+                <include name="TEST-*.xml"/>
+            </fileset>
+        </copy>
+
+        <echo message="XML reports copied to: ${git.reports.dir}"/>
+
+        <!-- Проверяем, есть ли XML файлы для коммита -->
+        <fileset id="xml.reports" dir="${git.reports.dir}" includes="TEST-*.xml"/>
+        <resourcecount refid="xml.reports" property="xml.reports.count"/>
+
+        <if>
+            <not>
+                <equals arg1="${xml.reports.count}" arg2="0"/>
+            </not>
+            <then>
+                <echo message="Adding test reports to git repository..."/>
+
+                <!-- Добавляем XML отчеты в git -->
+                <exec executable="${git.executable}" failonerror="false">
+                    <arg value="add"/>
+                    <arg value="${git.reports.dir}/TEST-*.xml"/>
+                </exec>
+
+                <!-- Выполняем commit -->
+                <exec executable="${git.executable}" failonerror="false">
+                    <arg value="commit"/>
+                    <arg value="-m"/>
+                    <arg value="${git.commit.message} - ${TODAY}"/>
+                </exec>
+
+                <echo message="Test reports successfully committed to git repository."/>
+            </then>
+            <else>
+                <echo message="No test reports found to commit."/>
+            </else>
+        </if>
+    </target>
+
     <!-- Help target -->
     <target name="help" description="Show help information">
         <echo message="SpaceMarine System Build Script (Apache Ant + Ivy)"/>
