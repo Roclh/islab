@@ -4,6 +4,10 @@
     <!-- Load properties file -->
     <property file="build.properties"/>
 
+    <tstamp>
+        <format property="TODAY" pattern="yyyy-MM-dd HH:mm:ss"/>
+    </tstamp>
+
     <path id="classpath.source">
         <fileset dir="./lib" includes="**/*.jar"/>
     </path>
