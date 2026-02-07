@@ -885,7 +885,7 @@
                 <exec executable="${git.executable}" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
-                    <arg value="${original.commit}"/>
+                    <arg value="origin/master"/>
                 </exec>
             </sequential>
         </for>
