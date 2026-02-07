@@ -833,12 +833,6 @@
                                        select="\1"
                                        defaultValue="${clean.commit.message.temp}"/>
 
-                        <propertyregex property="clean.commit.message"
-                                       input="${clean.commit.message.temp}"
-                                       regexp="^(.{0,30}).*"
-                                       select="\1"
-                                       defaultValue="${clean.commit.message.temp}"/>
-
                         <echo message="Building commit: ${commit.hash.short} - ${commit.message} (${commit.date})"/>
 
                         <!-- Define unique jar file path -->
