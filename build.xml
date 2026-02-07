@@ -767,18 +767,24 @@
         <echo message="Original branch: ${original.branch}"/>
         <echo message="Original commit: ${original.commit}"/>
 
-        <!-- Save original build.xml content -->
-        <loadfile property="original.build.xml" srcFile="build.xml"/>
+        <!-- Get last 4 commits list -->
+        <exec executable="${git.executable}" outputproperty="last.commits" failonerror="false">
+            <arg value="log"/>
+            <arg value="--pretty=format:%H|%s|%ad"/>
+            <arg value="--date=short"/>
+            <arg value="-4"/>
+        </exec>
 
         <!-- Process each revision -->
         <property name="revision.list" value="1,2,3,4"/>
         <property name="successful.builds" value="0"/>
+        <property name="current.revision.index" value="1"/>
 
         <for list="${revision.list}" param="rev">
             <sequential>
                 <echo message="=== Processing revision HEAD~@{rev} ==="/>
 
-                <!-- Try to checkout to revision -->
+                <!-- Checkout to revision -->
                 <exec executable="${git.executable}" resultproperty="checkout.result" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
@@ -788,8 +794,13 @@
                 <if>
                     <equals arg1="${checkout.result}" arg2="0"/>
                     <then>
-                        <!-- Get commit info for naming -->
-                        <exec executable="${git.executable}" outputproperty="commit.hash" failonerror="false">
+                        <!-- Get CURRENT commit info after checkout -->
+                        <exec executable="${git.executable}" outputproperty="commit.hash.full" failonerror="false">
+                            <arg value="rev-parse"/>
+                            <arg value="HEAD"/>
+                        </exec>
+
+                        <exec executable="${git.executable}" outputproperty="commit.hash.short" failonerror="false">
                             <arg value="rev-parse"/>
                             <arg value="--short"/>
                             <arg value="HEAD"/>
@@ -801,25 +812,40 @@
                             <arg value="--pretty=format:%s"/>
                         </exec>
 
+                        <exec executable="${git.executable}" outputproperty="commit.date" failonerror="false">
+                            <arg value="log"/>
+                            <arg value="-1"/>
+                            <arg value="--pretty=format:%ad"/>
+                            <arg value="--date=short"/>
+                        </exec>
+
                         <!-- Clean commit message for filename -->
-                        <propertyregex property="clean.commit.message"
-                                       input="${commit.message}"
-                                       regexp="[^a-zA-Z0-9\-\.]"
-                                       replace="_"
-                                       global="true"
-                                       defaultValue="${commit.message}"/>
+                        <script language="javascript">
+                            <![CDATA[
+                            var message = project.getProperty("commit.message");
+                            if (message) {
+                                // Replace all non-alphanumeric characters with underscore
+                                var clean = message.replace(/[^a-zA-Z0-9\-\.]/g, '_');
+                                // Limit to 30 characters
+                                if (clean.length > 30) {
+                                    clean = clean.substring(0, 30);
+                                }
+                                project.setProperty("clean.commit.message", clean);
+                            }
+                        ]]>
+                        </script>
 
-                        <!-- Limit length of cleaned message -->
-                        <propertyregex property="short.commit.message"
-                                       input="${clean.commit.message}"
-                                       regexp="^(.{0,20}).*"
-                                       select="\1"
-                                       defaultValue="${clean.commit.message}"/>
+                        <!-- Clean date for filename -->
+                        <propertyregex property="clean.date"
+                                       input="${commit.date}"
+                                       regexp="(\d{4})-(\d{2})-(\d{2})"
+                                       replace="\1\2\3"
+                                       defaultValue="${commit.date}"/>
 
-                        <echo message="Building commit: ${commit.hash} - ${commit.message}"/>
+                        <echo message="Building commit: ${commit.hash.short} - ${commit.message} (${commit.date})"/>
 
-                        <!-- Define jar file path -->
-                        <property name="rev.jar.file" value="${team.build.dir}/build-${commit.hash}-${short.commit.message}.jar"/>
+                        <!-- Define unique jar file path -->
+                        <property name="rev.jar.file" value="${team.build.dir}/build-${commit.hash.short}-${clean.date}.jar"/>
 
                         <!-- Run ant build in separate process -->
                         <echo message="Running ant build for this revision..."/>
@@ -833,39 +859,39 @@
                         <exec executable="${ant.executable}" resultproperty="ant.result" failonerror="false">
                             <arg value="build"/>
                             <arg value="-Djar.file=${rev.jar.file}"/>
-                            <arg value="-Ddist.dir=${team.build.dir}/dist-@{rev}"/>
+                            <arg value="-Ddist.dir=${team.build.dir}/dist-${commit.hash.short}"/>
                         </exec>
 
                         <if>
                             <equals arg1="${ant.result}" arg2="0"/>
                             <then>
-                                <echo message="Successfully built revision HEAD~@{rev}"/>
+                                <echo message="Successfully built revision HEAD~@{rev} (${commit.hash.short})"/>
                                 <math result="successful.builds" operand1="${successful.builds}" operation="+" operand2="1" datatype="int"/>
                             </then>
                             <else>
                                 <echo message="Failed to build revision HEAD~@{rev}"/>
                             </else>
                         </if>
+
+                        <!-- Increment revision index -->
+                        <math result="current.revision.index" operand1="${current.revision.index}" operation="+" operand2="1" datatype="int"/>
                     </then>
                     <else>
                         <echo message="Cannot checkout HEAD~@{rev}. Skipping this revision."/>
                     </else>
                 </if>
 
-                <!-- Always restore original commit -->
-                <echo message="Restoring original state..."/>
+                <!-- Always return to original commit -->
+                <echo message="Returning to original commit..."/>
                 <exec executable="${git.executable}" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
                     <arg value="${original.commit}"/>
                 </exec>
-
-                <!-- Restore original build.xml -->
-                <echo file="build.xml" message="${original.build.xml}"/>
             </sequential>
         </for>
 
-        <!-- Restore original branch if it was a branch -->
+        <!-- Restore original branch -->
         <if>
             <and>
                 <isset property="original.branch"/>
@@ -882,11 +908,11 @@
                 </exec>
             </then>
             <else>
-                <echo message="Returning to master branch..."/>
+                <echo message="Returning to origin/master..."/>
                 <exec executable="${git.executable}" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
-                    <arg value="master"/>
+                    <arg value="origin/master"/>
                 </exec>
             </else>
         </if>
