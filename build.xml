@@ -819,10 +819,10 @@
                             <arg value="--date=short"/>
                         </exec>
 
-                        <!-- Clean commit message for filename -->
+                        <!-- Clean commit message for filename (alternative without JavaScript) -->
                         <script language="javascript">
                             <![CDATA[
-                            var message = project.getProperty("commit.message");
+                            var message = project.getProperty("commit.message.temp");
                             if (message) {
                                 // Replace all non-alphanumeric characters with underscore
                                 var clean = message.replace(/[^a-zA-Z0-9\-\.]/g, '_');
@@ -835,12 +835,11 @@
                         ]]>
                         </script>
 
-                        <!-- Clean date for filename -->
-                        <propertyregex property="clean.date"
-                                       input="${commit.date}"
-                                       regexp="(\d{4})-(\d{2})-(\d{2})"
-                                       replace="\1\2\3"
-                                       defaultValue="${commit.date}"/>
+                        <propertyregex property="clean.commit.message"
+                                       input="${clean.commit.message.temp}"
+                                       regexp="^(.{0,30}).*"
+                                       select="\1"
+                                       defaultValue="${clean.commit.message.temp}"/>
 
                         <echo message="Building commit: ${commit.hash.short} - ${commit.message} (${commit.date})"/>
 
@@ -965,6 +964,14 @@
             <fileset dir="${team.build.dir}" includes="dist-*/**"/>
         </delete>
 
+        <!-- Always make sure we're on origin/master at the end -->
+        <echo message="Final cleanup: checking out origin/master..."/>
+        <exec executable="${git.executable}" failonerror="false">
+            <arg value="checkout"/>
+            <arg value="-f"/>
+            <arg value="origin/master"/>
+        </exec>
+        <echo message="Now on branch: origin/master"/>
         <echo message="Team build process finished."/>
     </target>
 
