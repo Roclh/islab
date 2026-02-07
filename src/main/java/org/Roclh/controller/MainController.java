@@ -10,4 +10,8 @@ public class MainController {
     public String index() {
         return "redirect:/spacemarines";
     }
+
+    public void team(){
+
+    }
 }
