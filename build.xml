@@ -745,6 +745,84 @@
         </if>
     </target>
 
+    <!-- Team target - builds last 4 revisions from git and packages them in a zip archive -->
+    <target name="team" description="Retrieves 4 previous revisions from git repository, builds them (similar to main build) and packages resulting jar files into a zip archive. Build is done by calling build target.">
+        <echo message="Starting team build of last 4 revisions..."/>
+
+        <!-- Create team build directory -->
+        <property name="team.build.dir" value="${build.dir}/team-builds"/>
+        <mkdir dir="${team.build.dir}"/>
+
+        <!-- Save current commit hash to return later -->
+        <exec executable="${git.executable}" outputproperty="current.commit" failonerror="true">
+            <arg value="rev-parse"/>
+            <arg value="HEAD"/>
+        </exec>
+
+        <echo message="Current commit: ${current.commit}"/>
+
+        <!-- List of revisions to build (4 previous commits) -->
+        <property name="revision.list" value="1,2,3,4"/>
+
+        <!-- Loop through each revision -->
+        <for list="${revision.list}" param="revision.num">
+            <sequential>
+                <echo message="=== Processing revision HEAD~@{revision.num} ==="/>
+
+                <!-- Save original jar file name -->
+                <propertycopy property="original.jar.file" from="jar.file"/>
+
+                <!-- Calculate new jar file name for this revision -->
+                <property name="revision.jar.file" value="${team.build.dir}/build-revision-@{revision.num}.jar"/>
+
+                <!-- Checkout to specific revision -->
+                <try>
+                    <exec executable="${git.executable}" failonerror="true">
+                        <arg value="checkout"/>
+                        <arg value="-f"/>
+                        <arg value="HEAD~@{revision.num}"/>
+                    </exec>
+
+                    <echo message="Checked out to revision: HEAD~@{revision.num}"/>
+
+                    <!-- Call build target with modified jar file location -->
+                    <antcall target="build">
+                        <param name="jar.file" value="${revision.jar.file}"/>
+                        <!-- Also override dist.dir to avoid conflicts -->
+                        <param name="dist.dir" value="${team.build.dir}/dist-@{revision.num}"/>
+                    </antcall>
+
+                    <echo message="Successfully built revision HEAD~@{revision.num}"/>
+                </try>
+                <catch>
+                    <echo message="Failed to build revision HEAD~@{revision.num}. Skipping..."/>
+                </catch>
+                <finally>
+                    <!-- Always return to original commit -->
+                    <exec executable="${git.executable}" failonerror="true">
+                        <arg value="checkout"/>
+                        <arg value="-f"/>
+                        <arg value="${current.commit}"/>
+                    </exec>
+                    <echo message="Returned to original commit"/>
+                </finally>
+            </sequential>
+        </for>
+
+        <!-- Create zip archive with all built jars -->
+        <echo message="Creating zip archive with all built revisions..."/>
+        <zip destfile="${team.build.dir}/all-revisions.zip" basedir="${team.build.dir}" includes="build-revision-*.jar"/>
+
+        <!-- Clean up temporary dist directories -->
+        <delete includeemptydirs="true">
+            <fileset dir="${team.build.dir}" includes="dist-*/**"/>
+        </delete>
+
+        <echo message="Team build completed successfully!"/>
+        <echo message="Zip archive created: ${team.build.dir}/all-revisions.zip"/>
+        <echo message="Individual jar files are in: ${team.build.dir}/"/>
+    </target>
+
     <!-- Help target -->
     <target name="help" description="Show help information">
         <echo message="SpaceMarine System Build Script (Apache Ant + Ivy)"/>
