@@ -767,151 +767,179 @@
         <echo message="Original branch: ${original.branch}"/>
         <echo message="Original commit: ${original.commit}"/>
 
+        <!-- Save original build.xml content -->
+        <loadfile property="original.build.xml" srcFile="build.xml"/>
+
         <!-- Process each revision -->
         <property name="revision.list" value="1,2,3,4"/>
-        <property name="revision.count" value="0"/>
+        <property name="successful.builds" value="0"/>
 
         <for list="${revision.list}" param="rev">
             <sequential>
-                <echo message="=== Building revision HEAD~@{rev} ==="/>
+                <echo message="=== Processing revision HEAD~@{rev} ==="/>
 
-                <!-- Checkout to revision -->
-                <exec executable="${git.executable}" resultproperty="git.result" failonerror="false">
+                <!-- Try to checkout to revision -->
+                <exec executable="${git.executable}" resultproperty="checkout.result" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
                     <arg value="HEAD~@{rev}"/>
                 </exec>
 
                 <if>
-                    <equals arg1="${git.result}" arg2="0"/>
+                    <equals arg1="${checkout.result}" arg2="0"/>
                     <then>
-                        <!-- Get current commit hash for naming -->
-                        <exec executable="${git.executable}" outputproperty="current.rev.hash" failonerror="false">
+                        <!-- Get commit info for naming -->
+                        <exec executable="${git.executable}" outputproperty="commit.hash" failonerror="false">
                             <arg value="rev-parse"/>
                             <arg value="--short"/>
                             <arg value="HEAD"/>
                         </exec>
 
-                        <!-- Get commit date for naming -->
-                        <exec executable="${git.executable}" outputproperty="current.rev.date" failonerror="false">
+                        <exec executable="${git.executable}" outputproperty="commit.message" failonerror="false">
                             <arg value="log"/>
                             <arg value="-1"/>
-                            <arg value="--format=%cd"/>
-                            <arg value="--date=short"/>
+                            <arg value="--pretty=format:%s"/>
                         </exec>
 
-                        <!-- Remove dashes from date for filename -->
-                        <propertyregex property="clean.date"
-                                       input="${current.rev.date}"
-                                       regexp="(\d{4})-(\d{2})-(\d{2})"
-                                       replace="\1\2\3"
-                                       defaultValue="${current.rev.date}"/>
+                        <!-- Clean commit message for filename -->
+                        <propertyregex property="clean.commit.message"
+                                       input="${commit.message}"
+                                       regexp="[^a-zA-Z0-9\-\.]"
+                                       replace="_"
+                                       global="true"
+                                       defaultValue="${commit.message}"/>
 
-                        <!-- Build this revision with unique name -->
-                        <antcall target="team-build-revision">
-                            <param name="revision.number" value="@{rev}"/>
-                            <param name="commit.hash" value="${current.rev.hash}"/>
-                            <param name="commit.date" value="${clean.date}"/>
-                        </antcall>
+                        <!-- Limit length of cleaned message -->
+                        <propertyregex property="short.commit.message"
+                                       input="${clean.commit.message}"
+                                       regexp="^(.{0,20}).*"
+                                       select="\1"
+                                       defaultValue="${clean.commit.message}"/>
 
-                        <!-- Increment revision count -->
-                        <math result="revision.count" operand1="${revision.count}" operation="+" operand2="1" datatype="int"/>
+                        <echo message="Building commit: ${commit.hash} - ${commit.message}"/>
+
+                        <!-- Define jar file path -->
+                        <property name="rev.jar.file" value="${team.build.dir}/build-${commit.hash}-${short.commit.message}.jar"/>
+
+                        <!-- Run ant build in separate process -->
+                        <echo message="Running ant build for this revision..."/>
+
+                        <!-- Determine ant executable based on OS -->
+                        <condition property="ant.executable" value="ant.bat" else="ant">
+                            <os family="windows"/>
+                        </condition>
+
+                        <!-- Try to run ant build -->
+                        <exec executable="${ant.executable}" resultproperty="ant.result" failonerror="false">
+                            <arg value="build"/>
+                            <arg value="-Djar.file=${rev.jar.file}"/>
+                            <arg value="-Ddist.dir=${team.build.dir}/dist-@{rev}"/>
+                        </exec>
+
+                        <if>
+                            <equals arg1="${ant.result}" arg2="0"/>
+                            <then>
+                                <echo message="Successfully built revision HEAD~@{rev}"/>
+                                <math result="successful.builds" operand1="${successful.builds}" operation="+" operand2="1" datatype="int"/>
+                            </then>
+                            <else>
+                                <echo message="Failed to build revision HEAD~@{rev}"/>
+                            </else>
+                        </if>
                     </then>
                     <else>
                         <echo message="Cannot checkout HEAD~@{rev}. Skipping this revision."/>
                     </else>
                 </if>
-            </sequential>
-        </for>
 
-        <!-- Return to original branch or master -->
-        <echo message="Returning to original state..."/>
-        <if>
-            <equals arg1="${original.branch}" arg2="HEAD"/>
-            <then>
-                <!-- We were in detached HEAD, checkout the commit directly -->
+                <!-- Always restore original commit -->
+                <echo message="Restoring original state..."/>
                 <exec executable="${git.executable}" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
                     <arg value="${original.commit}"/>
                 </exec>
-                <echo message="Returned to commit: ${original.commit}"/>
-            </then>
-            <else>
-                <!-- Return to original branch -->
+
+                <!-- Restore original build.xml -->
+                <echo file="build.xml" message="${original.build.xml}"/>
+            </sequential>
+        </for>
+
+        <!-- Restore original branch if it was a branch -->
+        <if>
+            <and>
+                <isset property="original.branch"/>
+                <not>
+                    <equals arg1="${original.branch}" arg2="HEAD"/>
+                </not>
+            </and>
+            <then>
+                <echo message="Restoring original branch: ${original.branch}"/>
                 <exec executable="${git.executable}" failonerror="false">
                     <arg value="checkout"/>
                     <arg value="-f"/>
                     <arg value="${original.branch}"/>
                 </exec>
-                <echo message="Returned to branch: ${original.branch}"/>
+            </then>
+            <else>
+                <echo message="Returning to master branch..."/>
+                <exec executable="${git.executable}" failonerror="false">
+                    <arg value="checkout"/>
+                    <arg value="-f"/>
+                    <arg value="master"/>
+                </exec>
             </else>
         </if>
 
-        <!-- Create zip archive -->
-        <antcall target="team-create-zip"/>
-
-        <echo message="Team build process completed. Built ${revision.count} revision(s)."/>
-    </target>
-
-    <!-- Helper target to build a single revision -->
-    <target name="team-build-revision">
-        <echo message="Building revision ${revision.number} (commit: ${commit.hash}, date: ${commit.date})..."/>
-
-        <!-- Set up paths for this revision -->
-        <property name="rev.jar.file" value="${team.build.dir}/build-rev-${revision.number}-${commit.hash}-${commit.date}.jar"/>
-        <property name="rev.dist.dir" value="${team.build.dir}/dist-${revision.number}"/>
-
-        <!-- Make sure dist directory exists and is empty -->
-        <delete dir="${rev.dist.dir}" quiet="true"/>
-        <mkdir dir="${rev.dist.dir}"/>
-
-        <!-- Call the standard build target with custom parameters -->
-        <antcall target="build">
-            <param name="jar.file" value="${rev.jar.file}"/>
-            <param name="dist.dir" value="${rev.dist.dir}"/>
-        </antcall>
-
-        <echo message="Revision ${revision.number} built successfully."/>
-    </target>
-
-    <!-- Helper target to create zip archive -->
-    <target name="team-create-zip">
-        <echo message="Creating zip archive with all built revisions..."/>
+        <!-- Create zip archive with successful builds -->
+        <echo message="Creating zip archive with ${successful.builds} successful build(s)..."/>
 
         <!-- Check if any jar files were created -->
-        <fileset id="team.jars" dir="${team.build.dir}" includes="build-rev-*.jar"/>
-        <resourcecount refid="team.jars" property="team.jar.count"/>
+        <fileset id="built.jars" dir="${team.build.dir}" includes="build-*.jar"/>
+        <resourcecount refid="built.jars" property="jar.count"/>
 
         <if>
             <not>
-                <equals arg1="${team.jar.count}" arg2="0"/>
+                <equals arg1="${jar.count}" arg2="0"/>
             </not>
             <then>
-                <!-- Delete old zip if exists -->
-                <delete file="${team.build.dir}/team-builds.zip" quiet="true"/>
-
                 <!-- Create zip with all jar files -->
                 <zip destfile="${team.build.dir}/team-builds.zip">
-                    <fileset dir="${team.build.dir}" includes="build-rev-*.jar"/>
+                    <fileset dir="${team.build.dir}" includes="build-*.jar"/>
                 </zip>
 
+                <echo message="=========================================="/>
+                <echo message="Team build completed successfully!"/>
                 <echo message="Zip archive created: ${team.build.dir}/team-builds.zip"/>
-                <echo message="Contains ${team.jar.count} jar file(s):"/>
+                <echo message="Contains ${jar.count} jar file(s):"/>
+
                 <for param="jar.file">
                     <path>
-                        <fileset dir="${team.build.dir}" includes="build-rev-*.jar"/>
+                        <fileset dir="${team.build.dir}" includes="build-*.jar"/>
                     </path>
                     <sequential>
                         <basename property="jar.name" file="@{jar.file}"/>
                         <echo message="  - ${jar.name}"/>
                     </sequential>
                 </for>
+
+                <echo message="Total successful builds: ${successful.builds} of 4"/>
+                <echo message="=========================================="/>
             </then>
             <else>
-                <echo message="Warning: No jar files were created for any revision."/>
+                <echo message="=========================================="/>
+                <echo message="Warning: No jar files were created."/>
+                <echo message="Team build completed with 0 successful builds."/>
+                <echo message="=========================================="/>
             </else>
         </if>
+
+        <!-- Clean up temporary directories -->
+        <delete includeemptydirs="true">
+            <fileset dir="${team.build.dir}" includes="dist-*/**"/>
+        </delete>
+
+        <echo message="Team build process finished."/>
     </target>
 
     <!-- Help target -->
